@@ -1,158 +1,43 @@
 import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  ScrollView,
-  Alert,
-} from 'react-native';
-import { testSupabaseConnection, testProductSearch, showConfigStatus } from '../lib/supabase-test';
-
-interface TestResult {
-  success: boolean;
-  message: string;
-  details?: any;
-}
+import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { getEnvironmentConfig, validateConfig } from '../config/environment';
 
 export const ConnectionTest: React.FC = () => {
-  const [connectionResult, setConnectionResult] = useState<TestResult | null>(null);
-  const [searchResult, setSearchResult] = useState<TestResult | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [configStatus, setConfigStatus] = useState<string>('Not tested');
+  const [config, setConfig] = useState(getEnvironmentConfig());
 
-  const handleTestConnection = async () => {
-    setLoading(true);
+  const testConfiguration = () => {
     try {
-      const result = await testSupabaseConnection();
-      setConnectionResult(result);
+      const isValid = validateConfig();
+      setConfigStatus(isValid ? '✅ Valid' : '❌ Invalid');
       
-      if (result.success) {
-        Alert.alert('✅ Success', result.message);
-      } else {
-        Alert.alert('❌ Error', result.message);
+      if (!isValid) {
+        Alert.alert('Configuration Error', 'Please check your environment configuration');
       }
     } catch (error) {
-      const errorResult: TestResult = {
-        success: false,
-        message: `Unexpected error: ${error}`,
-      };
-      setConnectionResult(errorResult);
-      Alert.alert('❌ Error', errorResult.message);
-    } finally {
-      setLoading(false);
+      setConfigStatus('❌ Error');
+      Alert.alert('Configuration Error', `Error: ${error}`);
     }
-  };
-
-  const handleTestSearch = async () => {
-    setLoading(true);
-    try {
-      const result = await testProductSearch('pepitos');
-      setSearchResult(result);
-      
-      if (result.success) {
-        Alert.alert('✅ Success', result.message);
-      } else {
-        Alert.alert('❌ Error', result.message);
-      }
-    } catch (error) {
-      const errorResult: TestResult = {
-        success: false,
-        message: `Unexpected error: ${error}`,
-      };
-      setSearchResult(errorResult);
-      Alert.alert('❌ Error', errorResult.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleShowConfig = () => {
-    showConfigStatus();
-    Alert.alert(
-      '📋 Configuration',
-      'Check the console to see the configuration status'
-    );
   };
 
   return (
-    <ScrollView style={styles.container}>
-      <Text style={styles.title}>🔧 Connection Tests</Text>
+    <View style={styles.container}>
+      <Text style={styles.title}>ScrapMarket App - Connection Test</Text>
       
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>1. Test Supabase Connection</Text>
-        <TouchableOpacity
-          style={[styles.button, loading && styles.buttonDisabled]}
-          onPress={handleTestConnection}
-          disabled={loading}
-        >
-          <Text style={styles.buttonText}>
-            {loading ? '🔄 Testing...' : '🔍 Test Connection'}
-          </Text>
-        </TouchableOpacity>
-        
-        {connectionResult && (
-          <View style={[
-            styles.result,
-            connectionResult.success ? styles.resultSuccess : styles.resultError
-          ]}>
-            <Text style={styles.resultText}>{connectionResult.message}</Text>
-            {connectionResult.details && (
-              <Text style={styles.detailsText}>
-                {JSON.stringify(connectionResult.details, null, 2)}
-              </Text>
-            )}
-          </View>
-        )}
+      <View style={styles.configSection}>
+        <Text style={styles.sectionTitle}>Current Configuration:</Text>
+        <Text style={styles.configText}>Environment: {config.ENVIRONMENT}</Text>
+        <Text style={styles.configText}>API URL: {config.API_BASE_URL}</Text>
+        <Text style={styles.configText}>Supabase URL: {config.SUPABASE_URL}</Text>
+        <Text style={styles.configText}>Supabase Key: {config.SUPABASE_ANON_KEY ? '✅ Set' : '❌ Missing'}</Text>
       </View>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>2. Test Product Search</Text>
-        <TouchableOpacity
-          style={[styles.button, loading && styles.buttonDisabled]}
-          onPress={handleTestSearch}
-          disabled={loading}
-        >
-          <Text style={styles.buttonText}>
-            {loading ? '🔄 Searching...' : '🔍 Search "pepitos"'}
-          </Text>
-        </TouchableOpacity>
-        
-        {searchResult && (
-          <View style={[
-            styles.result,
-            searchResult.success ? styles.resultSuccess : styles.resultError
-          ]}>
-            <Text style={styles.resultText}>{searchResult.message}</Text>
-            {searchResult.data && (
-              <Text style={styles.detailsText}>
-                Products found: {searchResult.data.length}
-              </Text>
-            )}
-          </View>
-        )}
-      </View>
+      <TouchableOpacity style={styles.testButton} onPress={testConfiguration}>
+        <Text style={styles.buttonText}>Test Configuration</Text>
+      </TouchableOpacity>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>3. View Configuration</Text>
-        <TouchableOpacity
-          style={styles.button}
-          onPress={handleShowConfig}
-        >
-          <Text style={styles.buttonText}>📋 View Status</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.instructions}>
-        <Text style={styles.instructionsTitle}>📝 Instructions:</Text>
-        <Text style={styles.instructionsText}>
-          1. Go to your Supabase dashboard{'\n'}
-          2. Settings → API{'\n'}
-          3. Copy the Project URL and anon key{'\n'}
-          4. Update app.json with your credentials{'\n'}
-          5. Restart the app
-        </Text>
-      </View>
-    </ScrollView>
+      <Text style={styles.statusText}>Status: {configStatus}</Text>
+    </View>
   );
 };
 
@@ -169,68 +54,44 @@ const styles = StyleSheet.create({
     marginBottom: 30,
     color: '#333',
   },
-  section: {
-    marginBottom: 30,
+  configSection: {
+    backgroundColor: '#fff',
+    padding: 15,
+    borderRadius: 8,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 15,
-    color: '#333',
-  },
-  button: {
-    backgroundColor: '#007AFF',
-    padding: 15,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  buttonDisabled: {
-    backgroundColor: '#ccc',
-  },
-  buttonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  result: {
-    marginTop: 15,
-    padding: 15,
-    borderRadius: 10,
-    borderWidth: 1,
-  },
-  resultSuccess: {
-    backgroundColor: '#d4edda',
-    borderColor: '#c3e6cb',
-  },
-  resultError: {
-    backgroundColor: '#f8d7da',
-    borderColor: '#f5c6cb',
-  },
-  resultText: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  detailsText: {
-    marginTop: 10,
-    fontSize: 12,
-    fontFamily: 'monospace',
-    color: '#666',
-  },
-  instructions: {
-    backgroundColor: '#e9ecef',
-    padding: 20,
-    borderRadius: 10,
-    marginTop: 20,
-  },
-  instructionsTitle: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontWeight: 'bold',
     marginBottom: 10,
     color: '#333',
   },
-  instructionsText: {
+  configText: {
     fontSize: 14,
-    lineHeight: 20,
+    marginBottom: 5,
     color: '#666',
+  },
+  testButton: {
+    backgroundColor: '#007AFF',
+    padding: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  buttonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  statusText: {
+    fontSize: 16,
+    textAlign: 'center',
+    fontWeight: 'bold',
+    color: '#333',
   },
 });

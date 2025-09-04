@@ -79,7 +79,7 @@ Edit `app.json` with your credentials:
 {
   "expo": {
     "extra": {
-      "supabaseUrl": "https://your-project.supabase.co",
+      "supabaseUrl": "https://fuyytpcqjxhoermrngkm.supabase.co",
       "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
       "apiBaseUrl": "http://localhost:5678/webhook"
     }

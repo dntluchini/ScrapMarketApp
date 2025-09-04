@@ -22,25 +22,25 @@ const getEnvVar = (key: string, defaultValue?: string): string => {
 
 // Development configuration (local n8n in Docker)
 const developmentConfig: EnvironmentConfig = {
-  API_BASE_URL: getEnvVar('API_BASE_URL', 'http://localhost:5678/webhook'),
-  SUPABASE_URL: getEnvVar('SUPABASE_URL', ''),
-  SUPABASE_ANON_KEY: getEnvVar('SUPABASE_ANON_KEY', ''),
+  API_BASE_URL: getEnvVar('apiBaseUrl', 'http://localhost:5678/webhook'),
+  SUPABASE_URL: getEnvVar('supabaseUrl', ''),
+  SUPABASE_ANON_KEY: getEnvVar('supabaseAnonKey', ''),
   ENVIRONMENT: 'development',
 };
 
 // Staging configuration (test VPS)
 const stagingConfig: EnvironmentConfig = {
-  API_BASE_URL: getEnvVar('API_BASE_URL', 'https://staging-your-vps.com/webhook'),
-  SUPABASE_URL: getEnvVar('SUPABASE_URL', ''),
-  SUPABASE_ANON_KEY: getEnvVar('SUPABASE_ANON_KEY', ''),
+  API_BASE_URL: getEnvVar('apiBaseUrl', 'https://staging-your-vps.com/webhook'),
+  SUPABASE_URL: getEnvVar('supabaseUrl', ''),
+  SUPABASE_ANON_KEY: getEnvVar('supabaseAnonKey', ''),
   ENVIRONMENT: 'staging',
 };
 
 // Production configuration (final VPS)
 const productionConfig: EnvironmentConfig = {
-  API_BASE_URL: getEnvVar('API_BASE_URL', 'https://api-your-domain.com/webhook'),
-  SUPABASE_URL: getEnvVar('SUPABASE_URL', ''),
-  SUPABASE_ANON_KEY: getEnvVar('SUPABASE_ANON_KEY', ''),
+  API_BASE_URL: getEnvVar('apiBaseUrl', 'https://api-your-domain.com/webhook'),
+  SUPABASE_URL: getEnvVar('supabaseUrl', ''),
+  SUPABASE_ANON_KEY: getEnvVar('supabaseAnonKey', ''),
   ENVIRONMENT: 'production',
 };
 
