@@ -1,60 +1,38 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { searchService, SearchResult } from '../services/searchService';
+import { PriceComparisonCard } from '../components/PriceComparisonCard';
 
 interface SearchScreenProps {
   navigation: any;
 }
 
-interface Product {
-  id: string;
-  name: string;
-  price: number;
-  market: string;
-  image?: string;
-}
-
 export const SearchScreen: React.FC<SearchScreenProps> = ({ navigation }) => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<SearchResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
     
     setIsLoading(true);
-    // TODO: Implement actual search with n8n API
-    // For now, we'll show mock data
-    setTimeout(() => {
-      setProducts([
-        {
-          id: '1',
-          name: searchQuery,
-          price: 15.99,
-          market: 'Carrefour',
-        },
-        {
-          id: '2',
-          name: searchQuery,
-          price: 18.50,
-          market: 'Jumbo',
-        },
-      ]);
+    try {
+      const response = await searchService.searchProducts(searchQuery);
+      setProducts(response.data);
+    } catch (error) {
+      Alert.alert('Error', 'No se pudo realizar la búsqueda. Intenta nuevamente.');
+      console.error('Search error:', error);
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
-  const renderProduct = ({ item }: { item: Product }) => (
-    <TouchableOpacity 
-      style={styles.productCard}
+  const renderProduct = ({ item }: { item: SearchResult }) => (
+    <PriceComparisonCard
+      product={item}
       onPress={() => navigation.navigate('ProductDetails', { product: item })}
-    >
-      <View style={styles.productInfo}>
-        <Text style={styles.productName}>{item.name}</Text>
-        <Text style={styles.productMarket}>{item.market}</Text>
-      </View>
-      <Text style={styles.productPrice}>${item.price}</Text>
-    </TouchableOpacity>
+    />
   );
 
   return (
@@ -93,14 +71,14 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({ navigation }) => {
       <FlatList
         data={products}
         renderItem={renderProduct}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => item.canonid}
         style={styles.productsList}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <Ionicons name="search" size={48} color="#ccc" />
             <Text style={styles.emptyStateText}>
-              {searchQuery ? 'No products found' : 'Search for products to see results'}
+              {searchQuery ? 'No se encontraron productos' : 'Busca productos para ver resultados'}
             </Text>
           </View>
         }
