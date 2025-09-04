@@ -1,19 +1,11 @@
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, View } from 'react-native';
-import { ConnectionTest } from './src/components/ConnectionTest';
+import AppNavigator from './src/navigation/AppNavigator';
 
 export default function App() {
   return (
-    <View style={styles.container}>
-      <ConnectionTest />
+    <>
+      <AppNavigator />
       <StatusBar style="auto" />
-    </View>
+    </>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-});
