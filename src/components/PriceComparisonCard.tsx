@@ -2,14 +2,18 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SearchResult } from '../services/searchService';
+import { productGroupingService } from '../services/productGroupingService';
 
 interface PriceComparisonCardProps {
   product: SearchResult;
   onPress: () => void;
 }
 
-export const PriceComparisonCard: React.FC<PriceComparisonCardProps> = ({ product, onPress }) => {
-  const formatPrice = (price: number) => `$${price.toFixed(2)}`;
+const PriceComparisonCard: React.FC<PriceComparisonCardProps> = ({ product, onPress }) => {
+  const formatPrice = (price: number | string) => {
+    const numPrice = typeof price === 'string' ? parseFloat(price) : price;
+    return `$${numPrice.toFixed(2)}`;
+  };
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('es-AR', {
@@ -41,7 +45,7 @@ export const PriceComparisonCard: React.FC<PriceComparisonCardProps> = ({ produc
       <View style={styles.header}>
         <View style={styles.titleContainer}>
           <Text style={styles.productName} numberOfLines={2}>
-            {product.canonname}
+            {productGroupingService.formatSearchResultName(product)}
           </Text>
           <Text style={styles.supermarketCount}>
             {product.total_supermarkets} supermercados
@@ -71,8 +75,17 @@ export const PriceComparisonCard: React.FC<PriceComparisonCardProps> = ({ produc
               <View style={styles.priceInfo}>
                 <Text style={styles.supermarketPrice}>{formatPrice(supermarket.precio)}</Text>
                 <View style={styles.stockContainer}>
-                  <Ionicons name="checkmark-circle" size={16} color="#34C759" />
-                  <Text style={styles.stockText}>En stock</Text>
+                  <Ionicons 
+                    name={supermarket.stock ? "checkmark-circle" : "close-circle"} 
+                    size={16} 
+                    color={supermarket.stock ? "#4CAF50" : "#F44336"} 
+                  />
+                  <Text style={[
+                    styles.stockText,
+                    { color: supermarket.stock ? "#4CAF50" : "#F44336" }
+                  ]}>
+                    {supermarket.stock ? "En stock" : "Sin stock"}
+                  </Text>
                 </View>
               </View>
             </View>
@@ -105,15 +118,17 @@ export const PriceComparisonCard: React.FC<PriceComparisonCardProps> = ({ produc
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#1C1C1E',
-    borderRadius: 12,
-    padding: 16,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 20,
     marginBottom: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowRadius: 8,
+    elevation: 5,
+    borderWidth: 1,
+    borderColor: '#f0f0f0',
   },
   header: {
     flexDirection: 'row',
@@ -126,27 +141,30 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   productName: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
-    color: '#FFFFFF',
-    marginBottom: 4,
+    color: '#1a1a1a',
+    marginBottom: 6,
+    lineHeight: 24,
   },
   supermarketCount: {
-    fontSize: 12,
-    color: '#8E8E93',
+    fontSize: 13,
+    color: '#666',
+    fontWeight: '500',
   },
   priceContainer: {
     alignItems: 'flex-end',
   },
   minPrice: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: 'bold',
-    color: '#34C759',
-    marginBottom: 2,
+    color: '#4CAF50',
+    marginBottom: 4,
   },
   priceRange: {
-    fontSize: 12,
-    color: '#8E8E93',
+    fontSize: 13,
+    color: '#666',
+    fontWeight: '500',
   },
   supermarketsList: {
     marginBottom: 16,
@@ -155,9 +173,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#2C2C2E',
+    borderBottomColor: '#f0f0f0',
   },
   supermarketInfo: {
     flex: 1,
@@ -168,9 +186,9 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   supermarketName: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: '#1a1a1a',
     marginLeft: 8,
   },
   priceInfo: {
@@ -179,9 +197,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   supermarketPrice: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: 'bold',
-    color: '#34C759',
+    color: '#4CAF50',
   },
   stockContainer: {
     flexDirection: 'row',
@@ -189,14 +207,15 @@ const styles = StyleSheet.create({
   },
   stockText: {
     fontSize: 12,
-    color: '#34C759',
+    color: '#4CAF50',
     marginLeft: 4,
+    fontWeight: '500',
   },
   viewButton: {
     backgroundColor: '#007AFF',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 10,
   },
   viewButtonText: {
     color: '#FFFFFF',
@@ -207,9 +226,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingTop: 12,
+    paddingTop: 16,
     borderTopWidth: 1,
-    borderTopColor: '#2C2C2E',
+    borderTopColor: '#f0f0f0',
   },
   lastUpdate: {
     flexDirection: 'row',
@@ -217,8 +236,9 @@ const styles = StyleSheet.create({
   },
   lastUpdateText: {
     fontSize: 12,
-    color: '#8E8E93',
+    color: '#666',
     marginLeft: 4,
+    fontWeight: '500',
   },
   alertButton: {
     flexDirection: 'row',
@@ -228,5 +248,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#007AFF',
     marginLeft: 4,
+    fontWeight: '600',
   },
 });
+
+export default PriceComparisonCard;
+
+
+

@@ -104,3 +104,7 @@ jspm_packages/
 
 # Stores VSCode versions used for testing VSCode extensions
 .vscode-test
+
+# MCP Configuration (keep local config, ignore cache)
+.mcp-cache/
+.mcp-logs/

@@ -1,0 +1,78 @@
+{
+  "mcp": {
+    "context7": {
+      "enabled": true,
+      "libraries": [
+        "react-native",
+        "expo",
+        "supabase",
+        "typescript",
+        "react-navigation",
+        "@expo/vector-icons",
+        "expo-constants",
+        "expo-secure-store"
+      ],
+      "config": {
+        "autoUpdate": true,
+        "includeExamples": true,
+        "includeBestPractices": true,
+        "includeTypeDefinitions": true
+      }
+    },
+    "n8n": {
+      "enabled": true,
+      "endpoints": {
+        "baseUrl": "http://localhost:5678/",
+        "webhook": "/webhook",
+        "mcp": "/mcp"
+      },
+      "workflows": {
+        "products": {
+          "endpoint": "/webhook/products",
+          "method": "GET",
+          "queryParam": "q"
+        },
+        "prices": {
+          "endpoint": "/webhook/products-per-market",
+          "method": "GET",
+          "queryParam": "canonname"
+        },
+        "alerts": {
+          "endpoint": "/webhook/user-alert",
+          "method": "POST"
+        },
+        "history": {
+          "endpoint": "/webhook/historial",
+          "method": "GET",
+          "pathParam": "canonid"
+        }
+      },
+      "config": {
+        "timeout": 30000,
+        "retries": 3,
+        "cors": true,
+        "logging": true
+      }
+    },
+    "n8n-railway": {
+      "enabled": true,
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "https://czlonkowskin8n-mcp-railwaylatest-production-1fc1.up.railway.app/mcp",
+        "--header",
+        "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0NmM2NzUwYi01NTY1LTQzZmMtOTIwYi1hNzlhNzcyYjYyNjYiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwiaWF0IjoxNzU3NTI0NDY0fQ.bkQrXzuRXquppQvkcnlpTqp0-Vczurhy35QaxrXTP6A"
+      ],
+      "config": {
+        "description": "n8n MCP server hosted on Railway for AI-assisted workflow development",
+        "features": [
+          "525+ n8n nodes documented",
+          "Workflow validation",
+          "AI-assisted workflow building",
+          "Real-time node configuration help"
+        ]
+      }
+    }
+  }
+}

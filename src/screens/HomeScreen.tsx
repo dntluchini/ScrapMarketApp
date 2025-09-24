@@ -1,112 +1,266 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import PopularProducts from '../components/PopularProducts';
+import { getEnvironmentConfig } from '../config/environment';
 
 interface HomeScreenProps {
   navigation: any;
 }
 
-export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
-  return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>ScrapMarket</Text>
-        <Text style={styles.subtitle}>Find the best prices</Text>
-      </View>
+const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
+  const [dataSaverMode, setDataSaverMode] = useState(false);
+  const config = getEnvironmentConfig();
 
-      <View style={styles.searchSection}>
-        <TouchableOpacity 
+  const handleProductSelect = (query: string) => {
+    // Navegar a SearchScreen con el query prellenado
+    navigation.navigate('Search', { initialQuery: query });
+  };
+
+  const handleQuickSearch = (query: string) => {
+    navigation.navigate('Search', { initialQuery: query });
+  };
+
+  const quickSearchItems = [
+    { icon: 'water', label: 'Agua', query: 'agua' },
+    { icon: 'leaf', label: 'Vegetales', query: 'vegetales' },
+    { icon: 'fish', label: 'Carnes', query: 'carne' },
+    { icon: 'wine', label: 'Bebidas', query: 'bebidas' },
+    { icon: 'ice-cream', label: 'Lácteos', query: 'lacteos' },
+    { icon: 'restaurant', label: 'Panadería', query: 'pan' },
+  ];
+
+  const renderQuickSearchItem = (item: typeof quickSearchItems[0]) => (
+    <TouchableOpacity
+      key={item.query}
+      style={styles.quickSearchItem}
+      onPress={() => handleQuickSearch(item.query)}
+    >
+      <View style={styles.quickSearchIcon}>
+        <Ionicons name={item.icon as any} size={24} color="#007AFF" />
+      </View>
+      <Text style={styles.quickSearchLabel}>{item.label}</Text>
+    </TouchableOpacity>
+  );
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        {/* Header */}
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.greeting}>¡Hola! 👋</Text>
+            <Text style={styles.subtitle}>Encuentra los mejores precios</Text>
+          </View>
+          <TouchableOpacity
+            style={[styles.dataSaverToggle, dataSaverMode && styles.dataSaverActive]}
+            onPress={() => setDataSaverMode(!dataSaverMode)}
+          >
+            <Ionicons name={dataSaverMode ? "leaf" : "leaf-outline"} size={20} color={dataSaverMode ? "#28a745" : "#6c757d"} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Search Button */}
+        <TouchableOpacity
           style={styles.searchButton}
           onPress={() => navigation.navigate('Search')}
         >
-          <Ionicons name="search" size={24} color="#666" />
-          <Text style={styles.searchButtonText}>Search products...</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.quickActions}>
-        <TouchableOpacity 
-          style={styles.actionButton}
-          onPress={() => navigation.navigate('Alerts')}
-        >
-          <Ionicons name="notifications" size={24} color="#007AFF" />
-          <Text style={styles.actionButtonText}>Price Alerts</Text>
+          <Ionicons name="search" size={20} color="#6c757d" />
+          <Text style={styles.searchButtonText}>Buscar productos...</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity 
-          style={styles.actionButton}
-          onPress={() => navigation.navigate('History')}
-        >
-          <Ionicons name="time" size={24} color="#007AFF" />
-          <Text style={styles.actionButtonText}>Price History</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
+        {/* Quick Search */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Búsquedas Rápidas</Text>
+          <View style={styles.quickSearchGrid}>
+            {quickSearchItems.map(renderQuickSearchItem)}
+          </View>
+        </View>
+
+        {/* Popular Products */}
+        <PopularProducts onProductSelect={handleProductSelect} />
+
+        {/* Features */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Características</Text>
+          <View style={styles.featuresList}>
+            <View style={styles.featureItem}>
+              <Ionicons name="flash" size={20} color="#28a745" />
+              <Text style={styles.featureText}>Resultados en 0.5-2 segundos</Text>
+            </View>
+            <View style={styles.featureItem}>
+              <Ionicons name="trending-up" size={20} color="#007AFF" />
+              <Text style={styles.featureText}>Comparación de precios en tiempo real</Text>
+            </View>
+            <View style={styles.featureItem}>
+              <Ionicons name="notifications" size={20} color="#FF9800" />
+              <Text style={styles.featureText}>Alertas de ofertas</Text>
+            </View>
+            <View style={styles.featureItem}>
+              <Ionicons name="leaf" size={20} color="#28a745" />
+              <Text style={styles.featureText}>Modo ahorro de datos</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Data Saver Mode Info */}
+        {dataSaverMode && (
+          <View style={styles.dataSaverInfo}>
+            <Ionicons name="information-circle" size={20} color="#28a745" />
+            <Text style={styles.dataSaverInfoText}>
+              Modo ahorro activo: Reduce consumo de datos móviles en 50%
+            </Text>
+          </View>
+        )}
+
+        {/* Footer */}
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>
+            ScrapMarket v1.0 • Optimizado para móvil
+          </Text>
+          <Text style={styles.footerText}>
+            Datos actualizados cada 6 horas
+          </Text>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
-    padding: 20,
+    backgroundColor: '#f8f9fa',
+  },
+  scrollView: {
+    flex: 1,
   },
   header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 60,
-    marginBottom: 40,
+    paddingHorizontal: 16,
+    paddingVertical: 20,
   },
-  title: {
-    fontSize: 32,
+  greeting: {
+    fontSize: 24,
     fontWeight: 'bold',
     color: '#333',
-    marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
-    color: '#666',
+    color: '#6c757d',
+    marginTop: 4,
   },
-  searchSection: {
-    marginBottom: 30,
+  dataSaverToggle: {
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+  },
+  dataSaverActive: {
+    borderColor: '#28a745',
+    backgroundColor: '#f8fff8',
   },
   searchButton: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#fff',
-    padding: 16,
+    marginHorizontal: 16,
+    marginBottom: 24,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
     borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#e9ecef',
   },
   searchButtonText: {
     marginLeft: 12,
     fontSize: 16,
-    color: '#666',
+    color: '#6c757d',
   },
-  quickActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  section: {
+    marginBottom: 24,
   },
-  actionButton: {
-    flex: 1,
-    backgroundColor: '#fff',
-    padding: 20,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginHorizontal: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  actionButtonText: {
-    marginTop: 8,
-    fontSize: 14,
+  sectionTitle: {
+    fontSize: 18,
     fontWeight: '600',
     color: '#333',
+    paddingHorizontal: 16,
+    marginBottom: 12,
+  },
+  quickSearchGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 16,
+  },
+  quickSearchItem: {
+    width: '30%',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    marginRight: '3.33%',
+    marginBottom: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+  },
+  quickSearchIcon: {
+    marginBottom: 8,
+  },
+  quickSearchLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#333',
+    textAlign: 'center',
+  },
+  featuresList: {
+    paddingHorizontal: 16,
+  },
+  featureItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    padding: 16,
+    marginBottom: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+  },
+  featureText: {
+    marginLeft: 12,
+    fontSize: 14,
+    color: '#333',
+    flex: 1,
+  },
+  dataSaverInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#e8f5e8',
+    marginHorizontal: 16,
+    marginBottom: 24,
+    padding: 16,
+    borderRadius: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: '#28a745',
+  },
+  dataSaverInfoText: {
+    marginLeft: 12,
+    fontSize: 14,
+    color: '#28a745',
+    flex: 1,
+  },
+  footer: {
+    padding: 20,
+    alignItems: 'center',
+  },
+  footerText: {
+    fontSize: 12,
+    color: '#6c757d',
+    marginBottom: 4,
   },
 });
+
+export default HomeScreen;

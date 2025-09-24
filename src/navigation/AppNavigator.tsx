@@ -1,36 +1,38 @@
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
-import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createStackNavigator } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
 
 // Import screens
-import { HomeScreen } from '../screens/HomeScreen';
-import { SearchScreen } from '../screens/SearchScreen';
-import { ProductDetailsScreen } from '../screens/ProductDetailsScreen';
-import { AlertsScreen } from '../screens/AlertsScreen';
-import { HistoryScreen } from '../screens/HistoryScreen';
+import HomeScreen from '../screens/HomeScreen';
+import SearchScreen from '../screens/SearchScreen';
+import ProductDetailsScreen from '../screens/ProductDetailsScreen';
+import AlertsScreen from '../screens/AlertsScreen';
+import HistoryScreen from '../screens/HistoryScreen';
+import ProfileScreen from '../screens/ProfileScreen';
 
-// Define navigation types
+// Navigation types
 export type RootStackParamList = {
   MainTabs: undefined;
-  Search: undefined;
-  ProductDetails: { product: any };
-  CreateAlert: undefined;
-  EditAlert: { alert: any };
+  ProductDetails: { productId: string; productName: string };
+  History: { productId: string; productName: string };
+  AlertDetails: { alertId: string };
 };
 
-export type TabParamList = {
+export type MainTabParamList = {
   Home: undefined;
+  Search: undefined;
   Alerts: undefined;
   History: undefined;
+  Profile: undefined;
 };
 
 const Stack = createStackNavigator<RootStackParamList>();
-const Tab = createBottomTabNavigator<TabParamList>();
+const Tab = createBottomTabNavigator<MainTabParamList>();
 
-// Tab Navigator
-const TabNavigator = () => {
+// Main Tab Navigator
+function MainTabNavigator() {
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -39,10 +41,14 @@ const TabNavigator = () => {
 
           if (route.name === 'Home') {
             iconName = focused ? 'home' : 'home-outline';
+          } else if (route.name === 'Search') {
+            iconName = focused ? 'search' : 'search-outline';
           } else if (route.name === 'Alerts') {
             iconName = focused ? 'notifications' : 'notifications-outline';
           } else if (route.name === 'History') {
             iconName = focused ? 'time' : 'time-outline';
+          } else if (route.name === 'Profile') {
+            iconName = focused ? 'person' : 'person-outline';
           } else {
             iconName = 'help-outline';
           }
@@ -50,84 +56,116 @@ const TabNavigator = () => {
           return <Ionicons name={iconName} size={size} color={color} />;
         },
         tabBarActiveTintColor: '#007AFF',
-        tabBarInactiveTintColor: '#666',
+        tabBarInactiveTintColor: 'gray',
         tabBarStyle: {
-          backgroundColor: '#fff',
+          backgroundColor: 'white',
           borderTopWidth: 1,
-          borderTopColor: '#eee',
+          borderTopColor: '#E5E5E5',
           paddingBottom: 5,
           paddingTop: 5,
           height: 60,
         },
-        headerShown: false,
+        headerStyle: {
+          backgroundColor: '#007AFF',
+        },
+        headerTintColor: 'white',
+        headerTitleStyle: {
+          fontWeight: 'bold',
+        },
       })}
     >
       <Tab.Screen 
         name="Home" 
         component={HomeScreen}
-        options={{
-          tabBarLabel: 'Home',
+        options={{ 
+          title: 'Inicio',
+          headerTitle: 'ScrapMarket'
+        }}
+      />
+      <Tab.Screen 
+        name="Search" 
+        component={SearchScreen}
+        options={{ 
+          title: 'Buscar',
+          headerTitle: 'Buscar Productos'
         }}
       />
       <Tab.Screen 
         name="Alerts" 
         component={AlertsScreen}
-        options={{
-          tabBarLabel: 'Alerts',
+        options={{ 
+          title: 'Alertas',
+          headerTitle: 'Mis Alertas'
         }}
       />
       <Tab.Screen 
         name="History" 
         component={HistoryScreen}
-        options={{
-          tabBarLabel: 'History',
+        options={{ 
+          title: 'Historial',
+          headerTitle: 'Historial de Precios'
+        }}
+      />
+      <Tab.Screen 
+        name="Profile" 
+        component={ProfileScreen}
+        options={{ 
+          title: 'Perfil',
+          headerTitle: 'Mi Perfil'
         }}
       />
     </Tab.Navigator>
   );
-};
+}
 
-// Main Stack Navigator
-const AppNavigator = () => {
+// Root Stack Navigator
+export default function AppNavigator() {
   return (
     <NavigationContainer>
       <Stack.Navigator
         screenOptions={{
-          headerShown: false,
+          headerStyle: {
+            backgroundColor: '#007AFF',
+          },
+          headerTintColor: 'white',
+          headerTitleStyle: {
+            fontWeight: 'bold',
+          },
         }}
       >
-        <Stack.Screen name="MainTabs" component={TabNavigator} />
         <Stack.Screen 
-          name="Search" 
-          component={SearchScreen}
-          options={{
-            headerShown: false,
-          }}
+          name="MainTabs" 
+          component={MainTabNavigator}
+          options={{ headerShown: false }}
         />
         <Stack.Screen 
           name="ProductDetails" 
           component={ProductDetailsScreen}
-          options={{
-            headerShown: false,
-          }}
+          options={({ route }) => ({
+            title: route.params?.productName || 'Detalles del Producto',
+            headerBackTitle: 'Atrás',
+          })}
         />
         <Stack.Screen 
-          name="CreateAlert" 
-          component={AlertsScreen} // TODO: Create CreateAlertScreen
-          options={{
-            headerShown: false,
-          }}
+          name="History" 
+          component={HistoryScreen}
+          options={({ route }) => ({
+            title: route.params?.productName || 'Historial de Precios',
+            headerBackTitle: 'Atrás',
+          })}
         />
         <Stack.Screen 
-          name="EditAlert" 
-          component={AlertsScreen} // TODO: Create EditAlertScreen
+          name="AlertDetails" 
+          component={AlertsScreen}
           options={{
-            headerShown: false,
+            title: 'Detalles de Alerta',
+            headerBackTitle: 'Atrás',
           }}
         />
       </Stack.Navigator>
     </NavigationContainer>
   );
-};
+}
 
-export default AppNavigator;
+
+

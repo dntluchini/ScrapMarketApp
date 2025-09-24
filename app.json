@@ -1,4 +1,4 @@
-{
+﻿{
   "expo": {
     "name": "ScrapMarket App",
     "slug": "scrapmarket-app",
@@ -29,9 +29,14 @@
     },
     "extra": {
       "environment": "development",
-      "apiBaseUrl": "http://localhost:5678/webhook",
+      "apiBaseUrl": "http://192.168.0.158:5678/webhook/search-products-complete?q=",
       "supabaseUrl": "https://fuyytpcqjxhoermrngkm.supabase.co",
-      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ1eXl0cGNxanhob2VybXJuZ2ttIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU3OTEyNzUsImV4cCI6MjA3MTM2NzI3NX0.kd2ZNa90NnF5txuNs1M6SQXfAhGsKiHJNvi0H7KfD9A"
+      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ1eXl0cGNxanhob2VybXJuZ2ttIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU3OTEyNzUsImV4cCI6MjA3MTM2NzI3NX0.kd2ZNa90NnF5txuNs1M6SQXfAhGsKiHJNvi0H7KfD9A",
+      "realTimeScraping": "true",
+      "offlineMode": "false",
+      "debugLogging": "true"
     }
   }
 }
+
+
