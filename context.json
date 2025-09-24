@@ -1,0 +1,657 @@
+{
+  "proyecto": "ScrapMarket App - Comparador de Precios",
+  "objetivo": "App móvil multiplataforma que consume datos scrapeados desde supermercados VTEX (Carrefour, Jumbo, Disco, Vea) para comparar precios, detectar descuentos y configurar alertas de precios.",
+  "nivel_de_experiencia": "Conocimientos sólidos en programación, APIs y automatizaciones (n8n). Aprendiendo desarrollo móvil con React Native/Expo.",
+  "estado_actual": {
+    "fase": "Desarrollo Avanzado - Funcionalidades Core + UX Optimizadas",
+    "version": "v1.2.0-beta",
+    "ultima_actualizacion": "Enero 2025"
+  },
+  "arquitectura_implementada": {
+    "frontend": {
+      "framework": "React Native con Expo SDK 54",
+      "lenguaje": "TypeScript con strict mode",
+      "navegacion": "React Navigation v6",
+      "estructura": "Arquitectura de servicios con separación de responsabilidades",
+      "estado": "useState/useEffect (próximo: Redux Toolkit)"
+    },
+    "backend": {
+      "automatizacion": "n8n (Docker local)",
+      "base_datos": "Supabase (PostgreSQL)",
+      "scraping": "VTEX API (no HTML scraping)",
+      "endpoints": "Webhooks REST personalizados",
+      "cache_predictivo": "Sistema de cache automático cada 6 horas"
+    },
+    "infraestructura": {
+      "desarrollo": "Docker local (n8n)",
+      "base_datos": "Supabase Cloud",
+      "deployment": "Pendiente (Railway/VPS)"
+    }
+  },
+  "funcionalidades_core": {
+    "implementadas": [
+      "✅ Búsqueda de productos en tiempo real",
+      "✅ Scraping automático cuando faltan resultados",
+      "✅ Agrupación inteligente de productos por EAN/marca/peso",
+      "✅ Visualización de precios por supermercado",
+      "✅ Navegación entre pantallas",
+      "✅ Manejo de estados de carga y errores",
+      "✅ Sistema de cache predictivo para productos populares",
+      "✅ Rotación inteligente de productos por categorías",
+      "✅ Modo ahorro de datos",
+      "✅ Búsqueda solo en base de datos",
+      "✅ Pull-to-refresh nativo",
+      "✅ Carga progresiva con skeleton loading",
+      "✅ Algoritmo de relevancia mejorado"
+    ],
+    "avanzadas": [
+      "✅ Capitalización automática de marcas",
+      "✅ Formato de nombres: 'Marca - Producto'",
+      "✅ Agrupación por similitud de nombres",
+      "✅ Detección automática de packs de productos",
+      "✅ Sistema de categorías semánticas",
+      "✅ Rotación temporal de productos populares",
+      "✅ Carga paralela con timeouts",
+      "✅ Validación de datos con Zod",
+      "✅ Logging estructurado",
+      "✅ Cache local con AsyncStorage"
+    ],
+    "pendientes": [
+      "⌛ Sistema de alertas de precios",
+      "⌛ Historial de precios",
+      "⌛ Autenticación de usuarios",
+      "⌛ Modo offline completo",
+      "⌛ Notificaciones push",
+      "⌛ Redux Toolkit para estado global",
+      "⌛ Error Boundary para manejo de errores"
+    ]
+  },
+  "tecnologias_y_herramientas": {
+    "frontend": {
+      "react_native": "Framework principal",
+      "expo": "SDK 54 para desarrollo rápido",
+      "typescript": "Type safety y mejor DX",
+      "react_navigation": "Navegación entre pantallas",
+      "async_storage": "Cache local",
+      "zod": "Validación de esquemas"
+    },
+    "backend": {
+      "n8n": "Automatización y scraping",
+      "supabase": "Base de datos PostgreSQL",
+      "vtex_api": "API de supermercados",
+      "docker": "Containerización de n8n",
+      "postgresql": "Base de datos con categorías"
+    },
+    "desarrollo": {
+      "context7_mcp": "Documentación en tiempo real",
+      "git_flow": "Control de versiones",
+      "conventional_commits": "Mensajes de commit estandarizados"
+    }
+  },
+  "estructura_del_proyecto": {
+    "ScrapMarketApp/": {
+      "src/": {
+        "components/": "Componentes reutilizables (ProductCard, SearchFilters, PopularProducts, etc.)",
+        "screens/": "Pantallas principales (Search, Home, Alerts, etc.)",
+        "services/": "Lógica de negocio (searchService, productGroupingService, n8nMcpService)",
+        "navigation/": "Configuración de navegación",
+        "types/": "Interfaces TypeScript",
+        "config/": "Configuración de ambiente y productos populares",
+        "hooks/": "Custom React hooks",
+        "utils/": "Utilidades (logger, validation, cache, productNameUtils)"
+      },
+      "assets/": "Imágenes y recursos",
+      "docs/": "Documentación técnica y guías de implementación"
+    },
+    "archivos_raiz": {
+      "context.json": "Configuración del proyecto (este archivo)",
+      "simulador_precios_app.html": "Prototipo funcional para testing"
+    }
+  },
+  "workflows_n8n_activos": {
+    "definitive_scraper_complete_optimized": {
+      "descripcion": "Workflow principal que maneja búsqueda en BD + scraping automático + respuesta unificada",
+      "tecnologias": [
+        "React Native",
+        "n8n webhooks",
+        "PostgreSQL",
+        "VTEX API"
+      ],
+      "endpoint": "/webhook/search-products-complete",
+      "nodos": 16,
+      "estado": "âœ… ACTIVO"
+    },
+    "search_in_db": {
+      "descripcion": "Workflow para búsqueda directa en base de datos sin scraping",
+      "tecnologias": [
+        "PostgreSQL",
+        "n8n webhooks"
+      ],
+      "endpoint": "/webhook/search-in-db",
+      "nodos": 4,
+      "estado": "âœ… ACTIVO"
+    },
+    "add_product_to_db": {
+      "descripcion": "Workflow para guardar productos scrapeados en base de datos",
+      "tecnologias": [
+        "PostgreSQL",
+        "n8n workflows"
+      ],
+      "endpoint": "/webhook/add-product-to-db",
+      "nodos": 16,
+      "estado": "âœ… ACTIVO"
+    },
+    "cache_predictivo_productos_populares": {
+      "descripcion": "Workflow automático que cachea productos populares cada 6 horas",
+      "tecnologias": [
+        "Cron Trigger",
+        "PostgreSQL",
+        "HTTP Requests"
+      ],
+      "nodos": 10,
+      "estado": "âœ… ACTIVO",
+      "frecuencia": "Cada 6 horas"
+    },
+    "test_cache_predictivo_manual": {
+      "descripcion": "Workflow de prueba para testing manual del cache predictivo",
+      "tecnologias": [
+        "Webhook Trigger",
+        "HTTP Requests"
+      ],
+      "nodos": 6,
+      "estado": "âœ… ACTIVO"
+    }
+  },
+  "funcionalidades_implementadas": {
+    "scraping_tiempo_real": {
+      "descripcion": "Polling cada 5s â†’ Muestra resultados parciales â†’ Guarda automáticamente en BD",
+      "tecnologias": [
+        "n8n workflows",
+        "Client-side polling",
+        "Real-time updates"
+      ],
+      "ubicacion": "SearchScreen.tsx + searchService.ts",
+      "estado": "âœ… Funcional"
+    },
+    "agrupacion_productos": {
+      "descripcion": "Agrupa por EAN + peso + marca â†’ Formato 'Marca - Producto' â†’ Capitaliza marcas",
+      "tecnologias": [
+        "TypeScript algorithms",
+        "Product similarity",
+        "Brand normalization"
+      ],
+      "ubicacion": "productGroupingService.ts",
+      "estado": "âœ… Funcional"
+    },
+    "guardado_automatico": {
+      "descripcion": "Guardar productos scrapeados automáticamente en BD",
+      "tecnologias": [
+        "n8n add_product_to_db workflow",
+        "Automatic triggers"
+      ],
+      "ubicacion": "SearchScreen.tsx + n8n workflow",
+      "estado": "âœ… Funcional"
+    },
+    "cache_predictivo": {
+      "descripcion": "Sistema automático de cache para productos populares con rotación por categorías",
+      "tecnologias": [
+        "n8n cron jobs",
+        "PostgreSQL",
+        "AsyncStorage"
+      ],
+      "ubicacion": "PopularProducts.tsx + n8n workflows",
+      "estado": "âœ… Funcional"
+    },
+    "rotacion_categorias": {
+      "descripcion": "Rotación inteligente de productos populares basada en categorías semánticas y horarios",
+      "tecnologias": [
+        "TypeScript algorithms",
+        "Time-based logic",
+        "Semantic categories"
+      ],
+      "ubicacion": "PopularProducts.tsx + popularProductsConfig.ts",
+      "estado": "âœ… Funcional"
+    },
+    "modo_ahorro_datos": {
+      "descripcion": "Modo que prioriza búsquedas en BD y reduce requests de scraping",
+      "tecnologias": [
+        "React Native state",
+        "Conditional API calls"
+      ],
+      "ubicacion": "SearchScreen.tsx + searchService.ts",
+      "estado": "âœ… Funcional"
+    },
+    "carga_progresiva": {
+      "descripcion": "Carga progresiva con skeleton loading y pull-to-refresh",
+      "tecnologias": [
+        "React Native",
+        "Skeleton components",
+        "RefreshControl"
+      ],
+      "ubicacion": "SearchScreen.tsx + ProductSkeleton.tsx",
+      "estado": "âœ… Funcional"
+    }
+  },
+  "mejoras_recientes": {
+    "arquitectura": [
+      "✅ Limpieza de archivos no utilizados (800+ líneas eliminadas)",
+      "✅ Unificación de componentes de producto",
+      "✅ Mejora en manejo de estados",
+      "✅ Optimización de polling de scraping",
+      "✅ Implementación de sistema de cache predictivo",
+      "✅ Arquitectura de categorías semánticas"
+    ],
+    "funcionalidad": [
+      "✅ Corrección de agrupación de productos",
+      "✅ Implementación de capitalización de marcas",
+      "✅ Mejora en detección de packs",
+      "✅ Optimización de timeouts y reintentos",
+      "✅ Sistema de rotación de productos populares",
+      "✅ Algoritmo de relevancia mejorado",
+      "✅ Modo ahorro de datos implementado"
+    ],
+    "calidad_codigo": [
+      "✅ Eliminación de código duplicado",
+      "✅ Mejora en TypeScript interfaces",
+      "✅ Optimización de imports y exports",
+      "✅ Documentación actualizada",
+      "✅ Validación de datos con Zod",
+      "✅ Logging estructurado implementado",
+      "✅ Manejo de errores mejorado"
+    ],
+    "ux_ui": [
+      "✅ Skeleton loading para mejor UX",
+      "✅ Pull-to-refresh nativo",
+      "✅ Carga progresiva de productos",
+      "✅ Indicadores de estado mejorados",
+      "✅ Rotación visual de productos populares",
+      "✅ Badges de 'MEJOR PRECIO'",
+      "✅ Categorías con iconos y colores"
+    ]
+  },
+  "configuracion_actual": {
+    "desarrollo": {
+      "n8n_url": "http://192.168.1.85:5678",
+      "supabase_url": "https://fuyytpcqjxhoermrngkm.supabase.co",
+      "expo_sdk": "54",
+      "typescript": "Configurado con strict mode",
+      "node_version": "18+"
+    },
+    "endpoints_n8n": {
+      "search_products_complete": "/webhook/search-products-complete (definitive_scraper_complete_optimized)",
+      "search_in_db": "/webhook/search-in-db (search_in_db)",
+      "add_product_to_db": "/webhook/add-product-to-db (add_product_to_db)",
+      "cache_predictivo": "Cron job cada 6 horas (cache_predictivo_productos_populares)",
+      "test_cache": "/webhook/test-cache-predictivo (test_cache_predictivo_manual)"
+    },
+    "base_datos": {
+      "tabla_products": "Incluye columnas de categorías (categories, primary_category, main_category, etc.)",
+      "tabla_reg_prices": "Precios históricos por supermercado",
+      "tabla_supermarket": "Información de supermercados",
+      "indices": "Optimizados para búsquedas por categorías y relevancia"
+    }
+  },
+  "categorias_semanticas": {
+    "carnes_pescados": {
+      "nombre": "Carnes y pescados",
+      "icono": "🥩",
+      "color": "#e74c3c",
+      "productos": [
+        "pollo",
+        "carne",
+        "pescado",
+        "cerdo",
+        "pavo",
+        "cordero"
+      ]
+    },
+    "lacteos": {
+      "nombre": "Lácteos",
+      "icono": "🥛",
+      "color": "#3498db",
+      "productos": [
+        "leche",
+        "yogur",
+        "queso",
+        "manteca",
+        "crema"
+      ]
+    },
+    "frutas_verduras": {
+      "nombre": "Frutas y verduras",
+      "icono": "🍎",
+      "color": "#27ae60",
+      "productos": [
+        "manzana",
+        "banana",
+        "tomate",
+        "lechuga",
+        "zanahoria"
+      ]
+    },
+    "bebidas": {
+      "nombre": "Bebidas",
+      "icono": "🍺",
+      "color": "#f39c12",
+      "productos": [
+        "coca cola",
+        "agua",
+        "jugo",
+        "cerveza",
+        "vino"
+      ]
+    },
+    "panaderia": {
+      "nombre": "Panadería",
+      "icono": "🍞",
+      "color": "#d35400",
+      "productos": [
+        "pan",
+        "galletas",
+        "tortas",
+        "facturas"
+      ]
+    },
+    "limpieza": {
+      "nombre": "Limpieza",
+      "icono": "🧼",
+      "color": "#9b59b6",
+      "productos": [
+        "detergente",
+        "jabón",
+        "papel",
+        "limpiador"
+      ]
+    }
+  },
+  "algoritmo_relevancia": {
+    "descripcion": "Sistema mejorado de relevancia que evita resultados irrelevantes",
+    "caracteristicas": [
+      "âœ… Búsqueda por palabras completas con regex",
+      "âœ… Penalización por palabras irrelevantes",
+      "âœ… Priorización por categorías semánticas",
+      "âœ… Coincidencias exactas tienen máxima prioridad",
+      "âœ… Filtrado por longitud mínima de palabras",
+      "âœ… Fallback para coincidencias parciales"
+    ],
+    "configuracion": {
+      "min_relevance": 25,
+      "min_word_length": 2,
+      "exact_match_bonus": 100,
+      "category_bonus": 50,
+      "irrelevant_penalty": -100
+    }
+  },
+  "próximos_pasos": {
+    "alta_prioridad": [
+      "🔴 Implementar Redux Toolkit para estado global",
+      "🔴 Crear Error Boundary para manejo de errores",
+      "🔴 Implementar sistema de alertas de precios",
+      "🔴 Crear historial de precios",
+      "🔴 Implementar notificaciones push"
+    ],
+    "media_prioridad": [
+      "🟡 Crear API Gateway para abstraer n8n",
+      "🟡 Implementar modo offline completo",
+      "🟡 Agregar Analytics y métricas",
+      "🟡 Crear Tests unitarios y de integración",
+      "🟡 Optimizar performance para dispositivos antiguos"
+    ],
+    "baja_prioridad": [
+      "🟢 Implementar autenticación de usuarios",
+      "🟢 Agregar sistema de favoritos",
+      "🟢 Crear comparador de listas de compras",
+      "🟢 Implementar CI/CD",
+      "🟢 Agregar internacionalización"
+    ]
+  },
+  "documentacion_disponible": {
+    "tecnica": [
+      "ScrapMarketApp/README.md - Documentación principal del proyecto",
+      "ScrapMarketApp/DEPLOYMENT.md - Guía de deployment",
+      "ScrapMarketApp/docs/MCP_SETUP.md - Configuración MCP",
+      "ScrapMarketApp/docs/cache_predictive_workflow.md - Workflow de cache predictivo",
+      "ScrapMarketApp/docs/setup_predictive_cache_db.sql - Scripts de BD",
+      "ScrapMarketApp/docs/GUIA_IMPLEMENTACION_CACHE.md - Guía de implementación",
+      "ScrapMarketApp/.github/CONTRIBUTING.md - Guía de contribución"
+    ],
+    "funcional": [
+      "simulador_precios_app.html - Prototipo funcional para testing",
+      "context.json - Este archivo con toda la información del proyecto"
+    ],
+    "workflows_n8n": [
+      "definitive_scraper_complete_optimized - Workflow principal (ACTIVO)",
+      "search_in_db - Búsqueda en BD (ACTIVO)",
+      "add_product_to_db - Guardar productos (ACTIVO)",
+      "cache_predictivo_productos_populares - Cache automático (ACTIVO)",
+      "test_cache_predictivo_manual - Testing manual (ACTIVO)"
+    ]
+  },
+  "archivos_importantes": {
+    "componentes_principales": [
+      "src/screens/SearchScreen.tsx - Pantalla principal de búsqueda",
+      "src/screens/HomeScreen.tsx - Pantalla de inicio con productos populares",
+      "src/components/PopularProducts.tsx - Componente de productos populares con rotación",
+      "src/components/GroupedProductCard.tsx - Tarjeta de producto agrupado",
+      "src/components/ProductSkeleton.tsx - Skeleton loading",
+      "src/components/ProgressIndicator.tsx - Indicador de progreso"
+    ],
+    "servicios": [
+      "src/services/searchService.ts - Servicio principal de búsqueda",
+      "src/services/productGroupingService.ts - Agrupación de productos",
+      "src/services/n8nMcpService.ts - Comunicación con n8n",
+      "src/utils/logger.ts - Sistema de logging",
+      "src/utils/validation.ts - Validación con Zod",
+      "src/utils/cache.ts - Cache local con AsyncStorage"
+    ],
+    "configuracion": [
+      "src/config/popularProductsConfig.ts - Configuración de productos populares",
+      "src/types/ - Interfaces TypeScript",
+      "tsconfig.json - Configuración TypeScript"
+    ]
+  },
+  "problemas_conocidos": {
+    "resueltos": [
+      "✅ Error de tipos implícitos en PopularProducts.tsx",
+      "✅ Variable dbOnlyMode no definida en SearchScreen.tsx",
+      "✅ Propiedades faltantes en GroupedProduct",
+      "✅ Referencias a canonname en GroupedProduct",
+      "✅ Algoritmo de relevancia demasiado estricto",
+      "✅ Extracción incorrecta de datos anidados en respuestas n8n"
+    ],
+    "pendientes": [
+      "🟦 Optimización de performance en listas largas",
+      "🟦 Manejo de errores de red más robusto",
+      "🟦 Validación de datos más estricta"
+    ]
+  },  
+  "agentes_colaboradores": {
+    "roles": {
+      "arquitecto_software": {
+        "objetivo": "Mantener una arquitectura móvil y de servicios escalable, modular y preparada para nuevas funcionalidades sin deuda técnica.",
+        "responsabilidades_clave": [
+          "Diseñar y actualizar el mapa de capas entre pantallas, servicios TypeScript y workflows n8n.",
+          "Definir contratos tipados y patrones de modularización para componentes, hooks y servicios.",
+          "Evaluar el impacto arquitectónico de nuevas features (alertas, historial, modo offline) y registrar ADR.",
+          "Guiar la adopción progresiva de Redux Toolkit y optimizaciones de rendimiento (memoización, selectores).",
+          "Supervisar métricas de performance y proponer refactors preventivos para evitar renderizados costosos."
+        ],
+        "entregables_recurrentes": [
+          "ADR y diagramas C4 de los flujos principales.",
+          "Roadmap de evolución del estado global y caching.",
+          "Checklist de performance para componentes críticos.",
+          "Guía de dependencias autorizadas y convenciones de imports."
+        ],
+        "herramientas_y_fuentes": [
+          "Docs técnicos en ScrapMarketApp/docs",
+          "Excalidraw o Mermaid para diagramas",
+          "Expo Diagnostics",
+          "Supabase Schema Viewer"
+        ],
+        "criterios_de_finalizado": [
+          "Componentes críticos sin dependencias circulares.",
+          "ADR aprobado por los demás agentes antes de implementarse.",
+          "Evidencia de pruebas de rendimiento en dispositivos objetivo."
+        ],
+        "puntos_de_colaboracion": [
+          "Coordinar con Automatizaciones n8n los contratos de entrada y salida de cada webhook.",
+          "Revisar con Ciberseguridad la exposición de datos sensibles en la arquitectura.",
+          "Alinear con Commits y Estructura la organización de carpetas y convenciones."
+        ]
+      },
+      "especialista_ciberseguridad": {
+        "objetivo": "Reducir la superficie de ataque en la app, n8n y Supabase mediante controles preventivos y detectivos.",
+        "responsabilidades_clave": [
+          "Realizar threat modeling de los workflows n8n y sus credenciales.",
+          "Diseñar y verificar políticas RLS en Supabase para proteger datos sensibles.",
+          "Gestionar el ciclo de vida de secretos (rotación de API keys VTEX, tokens Expo, credenciales n8n).",
+          "Automatizar escaneos de dependencias y revisiones OWASP Mobile/Backend.",
+          "Definir playbooks de respuesta ante incidentes y checklist de hardening en móviles."
+        ],
+        "entregables_recurrentes": [
+          "Informe trimestral de amenazas y recomendaciones.",
+          "Checklist OWASP MASVS adaptado al proyecto.",
+          "Procedimientos de respuesta y rotación de credenciales.",
+          "Alertas configuradas para accesos sospechosos en Supabase y n8n."
+        ],
+        "herramientas_y_fuentes": [
+          "Supabase Policies y Logs",
+          "n8n Credential Manager",
+          "OWASP MASVS y MASTG",
+          "npm audit o Snyk"
+        ],
+        "criterios_de_finalizado": [
+          "Cero secretos hardcodeados en código o workflows.",
+          "RLS verificada por pruebas automatizadas antes de releases.",
+          "Alertas de seguridad documentadas y atendidas en menos de 24 horas."
+        ],
+        "puntos_de_colaboracion": [
+          "Validar con Arquitectura de Software el diseño seguro de nuevas features.",
+          "Acompañar a Automatizaciones n8n en el manejo de errores y registros sensibles.",
+          "Definir con Commits y Estructura políticas de revisión y firmas de commits cuando aplique."
+        ]
+      },
+      "arquitecto_automatizaciones_n8n": {
+        "objetivo": "Garantizar workflows n8n resilientes, observables y fácilmente extensibles para nuevas automatizaciones.",
+        "responsabilidades_clave": [
+          "Versionar y documentar cada workflow (inputs, outputs, tiempos de ejecución y SLAs).",
+          "Diseñar estrategias de reintentos, manejo de errores y fallback a cache o supabase.",
+          "Integrar nuevas APIs (alertas, notificaciones) con validaciones y pruebas end-to-end.",
+          "Monitorear el rendimiento de n8n (tiempos, colas, uso de recursos) y ajustar triggers.",
+          "Mantener librería de nodos reutilizables (JS Code, HTTP Request, Supabase) con buenas prácticas."
+        ],
+        "entregables_recurrentes": [
+          "Catálogo actualizado de workflows y endpoints expuestos.",
+          "Plantillas n8n para errores controlados y notificaciones.",
+          "Dashboard de métricas clave (tiempo medio de respuesta, errores, reintentos).",
+          "Playbook de despliegue y rollback de workflows."
+        ],
+        "herramientas_y_fuentes": [
+          "n8n Editor",
+          "Supabase SQL y Storage",
+          "Postman o Insomnia",
+          "Sentry o Logflare para observabilidad"
+        ],
+        "criterios_de_finalizado": [
+          "Tiempo medio de respuesta menor a 2 segundos en endpoints críticos.",
+          "Errores controlados con reintentos documentados (al menos 95 % recuperables).",
+          "Documentación sincronizada con context.json tras cada cambio mayor."
+        ],
+        "puntos_de_colaboracion": [
+          "Alinear con Arquitectura de Software contratos de datos y caching.",
+          "Trabajar con Ciberseguridad en manejo seguro de tokens y logs.",
+          "Apoyar a Commits y Estructura en versionado y backups de workflows."
+        ]
+      },
+      "agente_commits_y_estructura": {
+        "objetivo": "Mantener el repositorio ordenado, con historial de cambios claro y carpetas coherentes con la arquitectura.",
+        "responsabilidades_clave": [
+          "Supervisar el cumplimiento de Conventional Commits y naming de ramas.",
+          "Automatizar linters, pruebas rápidas y validaciones antes de cada commit o PR.",
+          "Curar la estructura de carpetas (alta cohesión, baja duplicidad) y archivar documentación obsoleta.",
+          "Generar changelog y notas de versión para cada release beta o estable.",
+          "Asegurar que context.json y documentos relevantes se actualicen con cada cambio mayor."
+        ],
+        "entregables_recurrentes": [
+          "Guía viva de ramas y flujo de trabajo.",
+          "Scripts de verificación (lint, test, build) y plantillas de PR.",
+          "Changelog versionado y matriz de dependencias actualizada.",
+          "Reporte quincenal de limpieza de carpetas y archivos huérfanos."
+        ],
+        "herramientas_y_fuentes": [
+          "Git y Git Flow",
+          "Husky o lint-staged",
+          "ESLint y Prettier",
+          "tree o madge para auditoría de dependencias"
+        ],
+        "criterios_de_finalizado": [
+          "Commits sin errores de formato y con scope correcto.",
+          "Repositorio sin archivos huérfanos ni duplicados después de cada iteración.",
+          "Documentación sincronizada con los releases publicados."
+        ],
+        "puntos_de_colaboracion": [
+          "Sincronizar con Arquitectura de Software los cambios estructurales.",
+          "Incluir checklist de seguridad acordado con Ciberseguridad antes de mergear.",
+          "Versionar y respaldar workflows definidos por Automatizaciones n8n."
+        ]
+      }
+    },
+    "ritmos_de_colaboracion": {
+      "daily_async": "Actualización breve en canal compartido destacando avance, bloqueos y dependencias por agente.",
+      "reunion_semanal": "Sesión de 60 minutos para revisar métricas (performance, seguridad, SLA n8n, higiene de repositorio) y priorizar backlog.",
+      "revision_pre_release": "Checklist coordinado 48 horas antes de cada release beta: arquitectura valida integraciones, ciberseguridad aprueba riesgos, automatizaciones valida workflows y commits y estructura cierra changelog.",
+      "retro_mensual": "Espacio para documentar aprendizajes, deuda técnica y ajustes al proceso de colaboración."
+    },
+    "tablero_de_seguimiento": {
+      "formato": "Kanban compartido (Notion o Jira) con columnas Idea -> Diseño -> Implementación -> Validación -> Listo.",
+      "metricas_por_agente": {
+        "arquitecto_software": [
+          "Número de ADR aprobados",
+          "Componentes críticos sin regresiones de performance"
+        ],
+        "especialista_ciberseguridad": [
+          "Incidentes abiertos versus resueltos",
+          "Cobertura de RLS y escaneos automáticos"
+        ],
+        "arquitecto_automatizaciones_n8n": [
+          "SLA por workflow",
+          "Errores recuperados versus fatales"
+        ],
+        "agente_commits_y_estructura": [
+          "Commits que pasan validaciones automáticas",
+          "Número de archivos huérfanos detectados"
+        ]
+      }
+    }
+  },
+  "modo_de_ayuda_deseado": {
+    "rol_del_agente": "Especialista en arquitectura de aplicaciones moviles con enfoque pedagógico y riguroso.",
+    "estilo_del_agente": [
+      "Explicar el 'por qué' de cada decisión técnica",
+      "Mostrar pros y contras de cada implementación",
+      "Adaptar el lenguaje a nivel intermedio de desarrollo móvil",
+      "Priorizar soluciones escalables y mantenibles",
+      "Enfocarse en mejores prácticas de React Native y TypeScript",
+      "Considerar performance móvil y UX en todas las decisiones"
+    ]
+  },
+  "restricciones_y_consideraciones": [
+    "Usar n8n como backend (no backend tradicional)",
+    "Mantener compatibilidad con Expo SDK 54",
+    "Priorizar performance en dispositivos moviles",
+    "Mantener codigo limpio y documentado",
+    "Evitar dependencias innecesarias",
+    "Seguir principios de mobile-first design",
+    "Implementar buenas prácticas de TypeScript",
+    "Mantener compatibilidad con iOS y Android"
+  ],
+  "estadisticas_proyecto": {
+    "lineas_codigo": "~5000 líneas",
+    "archivos_typescript": "25+ archivos",
+    "componentes_react": "15+ componentes",
+    "servicios": "5+ servicios",
+    "workflows_n8n": "5 workflows activos",
+    "cobertura_funcional": "85% de funcionalidades core implementadas",
+    "tiempo_desarrollo": "2+ meses de desarrollo activo"
+  }
+}
