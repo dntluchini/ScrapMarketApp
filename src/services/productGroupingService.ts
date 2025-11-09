@@ -596,6 +596,13 @@ class ProductGroupingService {
   }
 
   // Función para formatear el nombre del producto con marca
+  private hasValidBrand(brand?: string | null): brand is string {
+    if (!brand) return false;
+    const normalized = brand.trim().toLowerCase();
+    if (!normalized) return false;
+    return normalized !== 'sin marca' && normalized !== 'sinmarca';
+  }
+
   formatProductNameWithBrand(product: Product | GroupedProduct): string {
     // Verificar que product sea un objeto válido
     if (!product || typeof product !== 'object') {
@@ -605,7 +612,7 @@ class ProductGroupingService {
     const productName = 'canonname' in product ? product.canonname : product.display_name;
     const brand = 'brand' in product ? product.brand : undefined;
     
-    if (!brand || !brand.trim()) {
+    if (!this.hasValidBrand(brand)) {
       return productName || 'Producto sin nombre';
     }
     
@@ -623,7 +630,7 @@ class ProductGroupingService {
     const brand = result.brand;
     
     // Si no hay marca, devolver el nombre original
-    if (!brand || !brand.trim()) {
+    if (!this.hasValidBrand(brand)) {
       return productName;
     }
     

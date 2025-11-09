@@ -16,59 +16,46 @@ interface SupermarketItemProps {
  * Componente optimizado para mostrar un item de supermercado
  * Memoizado para evitar re-renders innecesarios
  */
-export const SupermarketItem = React.memo<SupermarketItemProps>(({ 
-  item, 
-  onPress 
-}) => {
+export const SupermarketItem = React.memo<SupermarketItemProps>(({ item, onPress }) => {
   const handleVerPress = async () => {
-    if (item.url) {
-      try {
-        console.log('🔗 Opening URL:', item.url);
-        const supported = await Linking.canOpenURL(item.url);
-        
-        if (supported) {
-          await Linking.openURL(item.url);
-          console.log('✅ URL opened successfully');
-        } else {
-          console.log('❌ Cannot open URL:', item.url);
-          Alert.alert('Error', 'No se puede abrir este enlace');
-        }
-      } catch (error) {
-        console.error('❌ Error opening URL:', error);
-        Alert.alert('Error', 'No se pudo abrir el enlace');
+    if (!item.url) {
+      Alert.alert('Informaci\u00F3n', 'No hay enlace disponible para este producto');
+      onPress?.();
+      return;
+    }
+
+    try {
+      const supported = await Linking.canOpenURL(item.url);
+
+      if (supported) {
+        await Linking.openURL(item.url);
+      } else {
+        Alert.alert('Error', 'No se puede abrir este enlace');
       }
-    } else {
-      console.log('⚠️ No URL available for this item');
-      Alert.alert('Información', 'No hay enlace disponible para este producto');
+    } catch (error) {
+      console.error('Error opening URL:', error);
+      Alert.alert('Error', 'No se pudo abrir el enlace');
     }
-    
-    // También llamar a onPress si está definido (para compatibilidad)
-    if (onPress) {
-      onPress();
-    }
+
+    onPress?.();
   };
 
   return (
     <View style={styles.supermarketItem}>
       <View style={styles.supermarketInfo}>
-        <Text style={styles.supermarketName}>
-          {item.supermercado || 'Sin nombre'}
-        </Text>
-        <Text style={styles.supermarketPrice}>
-          {formatPrice(item.precio)}
-        </Text>
+        <Text style={styles.supermarketName}>{item.supermercado || 'Sin nombre'}</Text>
+        <Text style={styles.supermarketPrice}>{formatPrice(item.precio)}</Text>
       </View>
       <View style={styles.supermarketStatus}>
-        <Text style={[
-          styles.stock, 
-          { color: item.stock ? '#4CAF50' : '#F44336' }
-        ]}>
-          {item.stock ? 'En stock' : 'Sin Stock'}
-        </Text>
-        <TouchableOpacity 
-          style={styles.verButton}
-          onPress={handleVerPress}
+        <Text
+          style={[
+            styles.stock,
+            { color: item.stock ? '#047857' : '#b91c1c' },
+          ]}
         >
+          {item.stock ? 'En stock' : 'Sin stock'}
+        </Text>
+        <TouchableOpacity style={styles.verButton} onPress={handleVerPress}>
           <Text style={styles.verButtonText}>Ver</Text>
         </TouchableOpacity>
       </View>
@@ -82,24 +69,24 @@ const styles = StyleSheet.create({
   supermarketItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#404040',
+    borderBottomColor: '#eef2f7',
   },
   supermarketInfo: {
     flex: 1,
   },
   supermarketName: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: '#111827',
     textTransform: 'capitalize',
     marginBottom: 4,
   },
   supermarketPrice: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#4CAF50',
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0f172a',
     marginTop: 2,
   },
   supermarketStatus: {
@@ -107,22 +94,18 @@ const styles = StyleSheet.create({
   },
   stock: {
     fontSize: 12,
-    fontWeight: '500',
-    marginBottom: 4,
+    fontWeight: '600',
+    marginBottom: 6,
   },
   verButton: {
-    backgroundColor: '#2196F3',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 4,
+    backgroundColor: '#1d4ed8',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 999,
   },
   verButtonText: {
     color: '#FFFFFF',
     fontSize: 12,
-    fontWeight: '500',
+    fontWeight: '600',
   },
 });
-
-
-
-

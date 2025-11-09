@@ -11,14 +11,26 @@ interface ProductFooterProps {
  * Memoizado para evitar re-renders innecesarios
  */
 export const ProductFooter = React.memo<ProductFooterProps>(({ group }) => {
+  const supermarketCount = group.total_supermarkets ?? group.products.length;
+
   return (
     <View style={styles.footer}>
-      <View style={[
-        styles.stockIndicator, 
-        { backgroundColor: group.has_stock ? '#4CAF50' : '#F44336' }
-      ]}>
-        <Text style={styles.stockText}>
-          {group.has_stock ? 'Disponible' : 'Sin Stock'}
+      <Text style={styles.metaText}>
+        Actualizado en {supermarketCount} supermercado{supermarketCount === 1 ? '' : 's'}
+      </Text>
+      <View
+        style={[
+          styles.stockIndicator,
+          group.has_stock ? styles.stockAvailable : styles.stockUnavailable,
+        ]}
+      >
+        <Text
+          style={[
+            styles.stockText,
+            group.has_stock ? styles.stockAvailableText : styles.stockUnavailableText,
+          ]}
+        >
+          {group.has_stock ? 'Disponible' : 'Sin stock'}
         </Text>
       </View>
     </View>
@@ -33,15 +45,31 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  metaText: {
+    fontSize: 12,
+    color: '#6b7280',
+    fontWeight: '500',
+  },
   stockIndicator: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  stockAvailable: {
+    backgroundColor: '#ecfdf5',
+  },
+  stockUnavailable: {
+    backgroundColor: '#fef2f2',
   },
   stockText: {
-    color: '#fff',
     fontSize: 12,
-    fontWeight: '500',
+    fontWeight: '600',
+  },
+  stockAvailableText: {
+    color: '#047857',
+  },
+  stockUnavailableText: {
+    color: '#b91c1c',
   },
 });
 

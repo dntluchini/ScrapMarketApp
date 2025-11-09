@@ -1,44 +1,144 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Alert,
+  ActivityIndicator,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import PopularProducts from '../components/PopularProducts';
-import { getEnvironmentConfig } from '../config/environment';
 
 interface HomeScreenProps {
   navigation: any;
 }
 
+type QuickSearchItem = {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  query: string;
+};
+
+const QUICK_SEARCH_ENDPOINT = 'http://192.168.1.99:5678/webhook/quick_search';
+
+const QUICK_SEARCH_ITEMS: QuickSearchItem[] = [
+  { icon: 'water-outline', label: 'Agua', query: 'agua' },
+  { icon: 'nutrition-outline', label: 'Vegetales', query: 'vegetales' },
+  { icon: 'fast-food-outline', label: 'Carnes', query: 'carnes' },
+  { icon: 'wine-outline', label: 'Bebidas', query: 'bebidas' },
+  { icon: 'ice-cream-outline', label: 'L\u00E1cteos', query: 'l\u00E1cteos' },
+  { icon: 'pizza-outline', label: 'Panader\u00EDa', query: 'panader\u00EDa' },
+];
+
 const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const [dataSaverMode, setDataSaverMode] = useState(false);
-  const config = getEnvironmentConfig();
+  const [quickSearchLoading, setQuickSearchLoading] = useState<string | null>(null);
 
   const handleProductSelect = (query: string) => {
-    // Navegar a SearchScreen con el query prellenado
     navigation.navigate('Search', { initialQuery: query });
   };
 
-  const handleQuickSearch = (query: string) => {
-    navigation.navigate('Search', { initialQuery: query });
+  const normalizeQuickSearchResponse = (payload: any): any[] => {
+    const blocks = Array.isArray(payload) ? payload : [payload];
+    const groups: any[] = [];
+
+    blocks.forEach(block => {
+      const items = Array.isArray(block?.items) ? block.items : [];
+      items.forEach((item: any) => {
+        const meta = item?.meta || {};
+        const products = Array.isArray(item?.products) ? item.products : [];
+
+        products.forEach((product: any) => {
+          const supermarkets = Array.isArray(product?.supermarkets) ? product.supermarkets : [];
+          const mappedSupermarkets = supermarkets.map((market: any, index: number) => ({
+            canonid: product.canonid || meta.canonid || `quick-${index}`,
+            canonname: product.canonname || meta.canonname || item.query || 'Producto',
+            precio: Number(market.precio ?? market.price ?? product.min_price ?? 0),
+            supermercado: market.super || market.supermarket || 'supermercado',
+            ean: product.canonid || meta.canonid || '',
+            exact_weight: product.exact_weight || meta.exact_weight || '',
+            stock: Boolean(market.stock),
+            url: market.url || '',
+            imageUrl: market.imageUrl || product.imageUrl || meta.imageUrl,
+            brand: product.brand || meta.brand,
+          }));
+
+          groups.push({
+            ean: product.canonid || meta.canonid || '',
+            exact_weight: product.exact_weight || meta.exact_weight || '',
+            brand: product.brand || meta.brand,
+            products: mappedSupermarkets,
+            min_price: Number(product.min_price ?? meta.min_price ?? 0),
+            max_price: Number(product.max_price ?? meta.max_price ?? 0),
+            total_supermarkets: Number(product.total_supermarkets ?? supermarkets.length),
+            alternative_names: [],
+            display_name: product.canonname || meta.canonname || item.query || 'Producto',
+            has_stock: mappedSupermarkets.some(entry => entry.stock),
+            best_price:
+              mappedSupermarkets.length > 0
+                ? mappedSupermarkets.reduce((best, current) =>
+                    current.precio < best.precio ? current : best
+                  )
+                : undefined,
+          });
+        });
+      });
+    });
+
+    return groups;
   };
 
-  const quickSearchItems = [
-    { icon: 'water', label: 'Agua', query: 'agua' },
-    { icon: 'leaf', label: 'Vegetales', query: 'vegetales' },
-    { icon: 'fish', label: 'Carnes', query: 'carne' },
-    { icon: 'wine', label: 'Bebidas', query: 'bebidas' },
-    { icon: 'ice-cream', label: 'Lácteos', query: 'lacteos' },
-    { icon: 'restaurant', label: 'Panadería', query: 'pan' },
-  ];
+  const handleQuickSearch = async (item: QuickSearchItem) => {
+    setQuickSearchLoading(item.query);
+    try {
+      const response = await fetch(
+        `${QUICK_SEARCH_ENDPOINT}?q=${encodeURIComponent(item.query)}`
+      );
 
-  const renderQuickSearchItem = (item: typeof quickSearchItems[0]) => (
+      if (!response.ok) {
+        throw new Error('quick_search_failed');
+      }
+
+      const payload = await response.json();
+      const prefetchedGroups = normalizeQuickSearchResponse(payload);
+      const targetQuery = item.query;
+
+      navigation.navigate('Search', {
+        initialQuery: targetQuery,
+        prefetchedGroups,
+        quickSearchMeta: { category: item.label, source: 'quick_search' },
+      });
+    } catch (error) {
+      console.error('Quick search error:', error);
+      Alert.alert(
+        'No se pudo cargar',
+        'Intentaremos abrir la b\u00FAsqueda tradicional para esta categor\u00EDa.'
+      );
+      navigation.navigate('Search', { initialQuery: item.query });
+    } finally {
+      setQuickSearchLoading(null);
+    }
+  };
+
+  const renderQuickSearchItem = (item: QuickSearchItem) => (
     <TouchableOpacity
       key={item.query}
-      style={styles.quickSearchItem}
-      onPress={() => handleQuickSearch(item.query)}
+      style={[
+        styles.quickSearchItem,
+        quickSearchLoading === item.query && styles.quickSearchItemLoading,
+      ]}
+      onPress={() => handleQuickSearch(item)}
+      disabled={quickSearchLoading === item.query}
     >
       <View style={styles.quickSearchIcon}>
-        <Ionicons name={item.icon as any} size={24} color="#007AFF" />
+        {quickSearchLoading === item.query ? (
+          <ActivityIndicator size="small" color="#007AFF" />
+        ) : (
+          <Ionicons name={item.icon} size={24} color="#007AFF" />
+        )}
       </View>
       <Text style={styles.quickSearchLabel}>{item.label}</Text>
     </TouchableOpacity>
@@ -47,7 +147,6 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* Header */}
         <View style={styles.header}>
           <View>
             <Text style={styles.greeting}>¡Hola! 👋</Text>
@@ -57,11 +156,14 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             style={[styles.dataSaverToggle, dataSaverMode && styles.dataSaverActive]}
             onPress={() => setDataSaverMode(!dataSaverMode)}
           >
-            <Ionicons name={dataSaverMode ? "leaf" : "leaf-outline"} size={20} color={dataSaverMode ? "#28a745" : "#6c757d"} />
+            <Ionicons
+              name={dataSaverMode ? 'leaf' : 'leaf-outline'}
+              size={20}
+              color={dataSaverMode ? '#28a745' : '#6c757d'}
+            />
           </TouchableOpacity>
         </View>
 
-        {/* Search Button */}
         <TouchableOpacity
           style={styles.searchButton}
           onPress={() => navigation.navigate('Search')}
@@ -70,24 +172,22 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           <Text style={styles.searchButtonText}>Buscar productos...</Text>
         </TouchableOpacity>
 
-        {/* Alert Banner */}
         <View style={styles.alertBanner}>
           <Ionicons name="alert-circle" size={16} color="#b45309" style={styles.alertIcon} />
-          <Text style={styles.alertText}>Verifica los precios finales en la web del supermercado; pueden existir promociones vigentes.</Text>
+          <Text style={styles.alertText}>
+            Verifica los precios finales en la web del supermercado; pueden existir promociones vigentes.
+          </Text>
         </View>
 
-        {/* Quick Search */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Búsquedas Rápidas</Text>
+          <Text style={styles.sectionTitle}>Búsquedas rápidas</Text>
           <View style={styles.quickSearchGrid}>
-            {quickSearchItems.map(renderQuickSearchItem)}
+            {QUICK_SEARCH_ITEMS.map(renderQuickSearchItem)}
           </View>
         </View>
 
-        {/* Popular Products */}
         <PopularProducts onProductSelect={handleProductSelect} />
 
-        {/* Features */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Características</Text>
           <View style={styles.featuresList}>
@@ -110,7 +210,6 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           </View>
         </View>
 
-        {/* Data Saver Mode Info */}
         {dataSaverMode && (
           <View style={styles.dataSaverInfo}>
             <Ionicons name="information-circle" size={20} color="#28a745" />
@@ -120,14 +219,9 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           </View>
         )}
 
-        {/* Footer */}
         <View style={styles.footer}>
-          <Text style={styles.footerText}>
-            ScrapMarket v1.0 • Optimizado para móvil
-          </Text>
-          <Text style={styles.footerText}>
-            Datos actualizados cada 6 horas
-          </Text>
+          <Text style={styles.footerText}>ScrapMarket v1.0 • Optimizado para móvil</Text>
+          <Text style={styles.footerText}>Datos actualizados cada 6 horas</Text>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -221,17 +315,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     paddingHorizontal: 16,
+    justifyContent: 'space-between',
   },
   quickSearchItem: {
-    width: '30%',
+    width: '31%',
     backgroundColor: '#fff',
     borderRadius: 12,
     padding: 16,
-    marginRight: '3.33%',
     marginBottom: 12,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#e9ecef',
+  },
+  quickSearchItemLoading: {
+    opacity: 0.6,
   },
   quickSearchIcon: {
     marginBottom: 8,
@@ -290,3 +387,4 @@ const styles = StyleSheet.create({
 });
 
 export default HomeScreen;
+

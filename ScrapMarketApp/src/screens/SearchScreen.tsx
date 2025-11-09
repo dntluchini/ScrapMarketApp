@@ -68,6 +68,24 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route }) => {
     };
   }, [isScraping, scrapingStartTime]);
 
+  React.useEffect(() => {
+    if (route?.params?.initialQuery) {
+      setSearchQuery(route.params.initialQuery);
+    }
+  }, [route?.params?.initialQuery]);
+
+  React.useEffect(() => {
+    const prefetched = route?.params?.prefetchedGroups;
+    if (prefetched && Array.isArray(prefetched) && prefetched.length > 0) {
+      setGroupedProducts(prefetched);
+      setFilteredGroups(prefetched);
+      setProducts([]);
+      setScrapedProducts([]);
+      setIsLoading(false);
+      navigation.setParams({ prefetchedGroups: undefined });
+    }
+  }, [route?.params?.prefetchedGroups, navigation]);
+
   // Apply filters when grouped products or filters change
   React.useEffect(() => {
     applyFilters();

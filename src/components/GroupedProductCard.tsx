@@ -8,9 +8,9 @@ import {
   Modal,
   ScrollView,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { GroupedProduct, productGroupingService } from '../services/productGroupingService';
 import { useProductModal } from '../hooks/useProductModal';
-import { cleanProductName } from '../utils/productNameUtils';
 import { ProductHeader } from './ProductCard/ProductHeader';
 import { ProductFooter } from './ProductCard/ProductFooter';
 import { SupermarketItem } from './ProductCard/SupermarketItem';
@@ -22,20 +22,20 @@ interface GroupedProductCardProps {
 
 /**
  * Componente optimizado para mostrar productos agrupados
- * Sigue las mejores prácticas de React Native para performance
+ * Sigue buenas practicas de React Native para performance
  */
 export const GroupedProductCard = React.memo<GroupedProductCardProps>(({
   group,
   onPress,
 }) => {
   const { showDetails, openModal, closeModal } = useProductModal();
-  
-  // Validación de datos para evitar errores
+
+  // Validacion de datos para evitar errores
   if (!group || !group.products || !Array.isArray(group.products)) {
     console.warn('GroupedProductCard: Invalid group data', group);
     return null;
   }
-  
+
   // Memoizar callbacks para evitar re-renders innecesarios
   const handleCardPress = useCallback(() => {
     if (onPress) {
@@ -46,13 +46,13 @@ export const GroupedProductCard = React.memo<GroupedProductCardProps>(({
   }, [onPress, openModal]);
 
   const handleSupermarketPress = useCallback((item: any) => {
-    // TODO: Implementar navegación al supermercado
+    // TODO: Implementar navegacion al supermercado
     console.log('Navigate to supermarket:', item.supermercado);
   }, []);
 
   const renderSupermarketItem = useCallback(({ item }: { item: any }) => (
-    <SupermarketItem 
-      item={item} 
+    <SupermarketItem
+      item={item}
       onPress={() => handleSupermarketPress(item)}
     />
   ), [handleSupermarketPress]);
@@ -60,13 +60,23 @@ export const GroupedProductCard = React.memo<GroupedProductCardProps>(({
   return (
     <>
       <TouchableOpacity
-        style={styles.container}
+        style={styles.card}
         onPress={handleCardPress}
-        activeOpacity={0.7}
+        activeOpacity={0.85}
       >
         <ProductHeader group={group} />
-        
-        {/* Lista de supermercados */}
+
+        <View style={styles.divider} />
+
+        <View style={styles.supermarketsHeader}>
+          <Text style={styles.supermarketsTitle}>Compar\u00E1 precios</Text>
+          <View style={styles.supermarketsBadge}>
+            <Text style={styles.supermarketsBadgeText}>
+              {group.products.length} oferta{group.products.length === 1 ? '' : 's'}
+            </Text>
+          </View>
+        </View>
+
         <View style={styles.supermarketsList}>
           {group.products.map((productItem: any, index: number) => (
             <SupermarketItem
@@ -76,15 +86,15 @@ export const GroupedProductCard = React.memo<GroupedProductCardProps>(({
             />
           ))}
         </View>
-        
+
         <ProductFooter group={group} />
       </TouchableOpacity>
-      
+
       {/* Modal con detalles */}
       <Modal
         visible={showDetails}
         animationType="slide"
-        transparent={true}
+        transparent
         onRequestClose={closeModal}
       >
         <View style={styles.modalOverlay}>
@@ -97,12 +107,12 @@ export const GroupedProductCard = React.memo<GroupedProductCardProps>(({
                 style={styles.closeButton}
                 onPress={closeModal}
               >
-                <Text style={styles.closeButtonText}>✕</Text>
+                <Ionicons name="close" size={20} color="#1f2937" />
               </TouchableOpacity>
             </View>
-            
-            <ScrollView style={styles.supermarketsList}>
-              <Text style={styles.modalTitle}>Precios por Supermercado:</Text>
+
+            <ScrollView style={styles.modalScroll}>
+              <Text style={styles.modalSubtitle}>Precios por supermercado</Text>
               <FlatList
                 data={group.products}
                 renderItem={renderSupermarketItem}
@@ -121,23 +131,48 @@ export const GroupedProductCard = React.memo<GroupedProductCardProps>(({
 GroupedProductCard.displayName = 'GroupedProductCard';
 
 const styles = StyleSheet.create({
-  container: {
-    backgroundColor: '#2C2C2C',
-    borderRadius: 12,
-    padding: 16,
-    marginVertical: 8,
+  card: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 20,
     marginHorizontal: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 5,
+    marginBottom: 16,
+    shadowColor: '#0d2233',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#e5e7eb',
+    marginVertical: 16,
+  },
+  supermarketsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  supermarketsTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  supermarketsBadge: {
+    backgroundColor: '#e0edff',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+  },
+  supermarketsBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#1d4ed8',
   },
   supermarketsList: {
-    marginVertical: 8,
+    marginBottom: 16,
   },
-  
-  // Modal styles
   modalOverlay: {
     flex: 1,
     justifyContent: 'center',
@@ -165,19 +200,16 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 10,
   },
+  modalSubtitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#4b5563',
+    marginBottom: 12,
+  },
+  modalScroll: {
+    maxHeight: '90%',
+  },
   closeButton: {
     padding: 8,
-  },
-  closeButtonText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#666',
-  },
-  modalInfo: {
-    marginBottom: 16,
-  },
-  modalEan: {
-    fontSize: 14,
-    color: '#666',
   },
 });
