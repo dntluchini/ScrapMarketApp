@@ -1,371 +1,453 @@
-﻿import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
+﻿import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Animated, Modal, ScrollView, Linking, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { searchService } from '../services/searchService';
-import { GroupedProductCard } from './GroupedProductCard';
-import { GroupedProduct } from '../services/productGroupingService';
+import { GroupedProduct, Product, productGroupingService } from '../services/productGroupingService';
+import PopularProductCard from './PopularProductCard';
+import { n8nMcpService } from '../services/n8nMcpService';
+import { ProductHeader } from './ProductCard/ProductHeader';
+import { formatPrice } from '../utils/productNameUtils';
 
 interface PopularProductsProps {
   onProductSelect?: (query: string) => void;
 }
 
-const POPULAR_PRODUCTS_REQUEST_TIMEOUT = 65000; // 65s para acompañar workflows de scraping más lentos
+const POPULAR_PRODUCTS_PATH = '/webhook/popular_products';
+const REFRESH_INTERVAL = 30 * 60 * 1000;
+const CAROUSEL_ITEM_WIDTH = 220;
+const AUTO_SCROLL_SPEED = 45;
+
+const getPopularProductsEndpoint = (): string => {
+  const baseUrl = n8nMcpService.getConfig().baseUrl;
+  return `${baseUrl}${POPULAR_PRODUCTS_PATH}`;
+};
+
+const normalizeSupermarket = (
+  raw: any,
+  fallback: { canonid: string; canonname: string; ean: string; exact_weight: string; brand?: string; brandId?: string; imageUrl?: string; }
+): Product | null => {
+  if (!raw || typeof raw !== 'object') return null;
+
+  const price = Number(raw.precio ?? raw.price ?? raw.min_price ?? raw.max_price ?? raw.best_price);
+  if (Number.isNaN(price)) return null;
+
+  const supermarketName = raw.supermercado ?? raw.super ?? raw.store ?? raw.market ?? raw.name;
+  if (!supermarketName) return null;
+
+  const resolvedImage = raw.imageUrl ?? raw.imgUrl ?? raw.image_url ?? raw.imageurl ?? raw.image ?? fallback.imageUrl;
+
+  return {
+    canonid: String(raw.canonid ?? fallback.canonid),
+    canonname: String(raw.canonname ?? fallback.canonname),
+    precio: price,
+    supermercado: String(supermarketName),
+    ean: String(raw.ean ?? fallback.ean),
+    exact_weight: String(raw.exact_weight ?? fallback.exact_weight ?? ''),
+    stock: Boolean(raw.stock ?? raw.in_stock ?? true),
+    url: String(raw.url ?? ''),
+    imageUrl: resolvedImage ? String(resolvedImage) : undefined,
+    brand: raw.brand ?? fallback.brand,
+    brandId: raw.brandId ?? fallback.brandId,
+    sku: raw.sku,
+    skuRef: raw.skuRef,
+    storeBase: raw.storeBase,
+    site: raw.site,
+    relevance: raw.relevance,
+  };
+};
+
+const collectProductEntries = (node: any, context: { meta?: any; query?: string } = {}): Array<{ product: any; context: { meta?: any; query?: string } }> => {
+  if (!node) return [];
+
+  if (Array.isArray(node)) {
+    return node.flatMap(item => collectProductEntries(item, context));
+  }
+
+  if (Array.isArray(node.items)) {
+    return node.items.flatMap((item: any) => {
+      const itemContext = { meta: item?.meta ?? context.meta, query: item?.query ?? context.query };
+      if (Array.isArray(item?.products)) {
+        return item.products.flatMap((product: any) => collectProductEntries(product, itemContext));
+      }
+      return collectProductEntries(item, itemContext);
+    });
+  }
+
+  if (Array.isArray(node.data)) {
+    return collectProductEntries(node.data, context);
+  }
+
+  if (Array.isArray(node.results)) {
+    return collectProductEntries(node.results, context);
+  }
+
+  if (Array.isArray(node.popular_products)) {
+    return collectProductEntries(node.popular_products, context);
+  }
+
+  if (Array.isArray(node.products) && !Array.isArray(node.supermarkets)) {
+    const nextContext = { meta: node.meta ?? context.meta, query: node.query ?? context.query };
+    return collectProductEntries(node.products, nextContext);
+  }
+
+  if (Array.isArray(node.supermarkets)) {
+    return [{ product: node, context }];
+  }
+
+  return [];
+};
+
+const normalizePopularProducts = (payload: any): GroupedProduct[] => {
+  const entries = collectProductEntries(payload);
+
+  return entries
+    .map(({ product, context }) => {
+      if (!product || typeof product !== 'object') return null;
+
+      const meta = { ...(context.meta || {}), ...(product.meta || {}) };
+      const displayName = product.canonname ?? meta.canonname ?? product.name ?? meta.product_name ?? context.query;
+      if (!displayName) return null;
+
+      const canonid = String(product.canonid ?? meta.canonid ?? displayName);
+      const ean = String(product.ean ?? meta.ean ?? canonid);
+      const exactWeight = String(product.exact_weight ?? meta.exact_weight ?? '');
+
+      const imageCandidates = [
+        product.imageUrl,
+        product.imgUrl,
+        product.imageurl,
+        product.image_url,
+        product.image,
+        meta.imageUrl,
+        meta.imgUrl,
+        meta.imageurl,
+        meta.image_url,
+        meta.image,
+      ];
+      const productImageCandidate = imageCandidates.find(value => typeof value === 'string' && value.trim().length > 0) ?? imageCandidates.find(Boolean);
+      const productImage = productImageCandidate ? String(productImageCandidate) : undefined;
+
+      const rawSupermarkets = Array.isArray(product.supermarkets) ? product.supermarkets : [];
+      const mappedProducts = rawSupermarkets
+        .map(raw =>
+          normalizeSupermarket(raw, {
+            canonid,
+            canonname: displayName,
+            ean,
+            exact_weight: exactWeight,
+            brand: product.brand ?? meta.brand,
+            brandId: product.brandId ?? meta.brandId,
+            imageUrl: productImage,
+          }),
+        )
+        .filter(Boolean) as Product[];
+
+      if (mappedProducts.length === 0) return null;
+
+      const prices = mappedProducts.map(item => item.precio);
+      const minPrice = Number(product.min_price ?? meta.min_price ?? Math.min(...prices));
+      const maxPrice = Number(product.max_price ?? meta.max_price ?? Math.max(...prices));
+
+      const bestPriceCandidate =
+        product.best_price && typeof product.best_price === 'object'
+          ? normalizeSupermarket(product.best_price, {
+              canonid,
+              canonname: displayName,
+              ean,
+              exact_weight: exactWeight,
+              brand: product.brand ?? meta.brand,
+              brandId: product.brandId ?? meta.brandId,
+              imageUrl: productImage,
+            })
+          : null;
+
+      const bestPrice = bestPriceCandidate ?? mappedProducts.reduce((currentBest, candidate) => (candidate.precio < currentBest.precio ? candidate : currentBest), mappedProducts[0]);
+
+      const alternativeNames = [
+        ...(Array.isArray(meta.alternative_names) ? meta.alternative_names : []),
+        ...(Array.isArray(product.alternative_names) ? product.alternative_names : []),
+      ]
+        .map(String)
+        .filter(Boolean);
+
+      return {
+        ean,
+        exact_weight: exactWeight,
+        brand: product.brand ?? meta.brand,
+        brandId: product.brandId ?? meta.brandId,
+        products: mappedProducts,
+        min_price: minPrice,
+        max_price: maxPrice,
+        total_supermarkets: Number(product.total_supermarkets ?? mappedProducts.length),
+        alternative_names: Array.from(new Set(alternativeNames)),
+        display_name: String(displayName),
+        has_stock: mappedProducts.some(item => item.stock),
+        imageUrl: productImage ?? bestPrice?.imageUrl ?? mappedProducts[0]?.imageUrl,
+        best_price: bestPrice,
+      } satisfies GroupedProduct;
+    })
+    .filter((item): item is GroupedProduct => Boolean(item));
+};
 
 const PopularProducts: React.FC<PopularProductsProps> = ({ onProductSelect }) => {
   const [popularProducts, setPopularProducts] = useState<GroupedProduct[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
-  const [rotationInfo, setRotationInfo] = useState<string>('');
-  const [loadingProgress, setLoadingProgress] = useState<string>('');
+  const [error, setError] = useState<string | null>(null);
+  const scrollX = useRef(new Animated.Value(0)).current;
+  const carouselRef = useRef<Animated.FlatList<GroupedProduct>>(null);
+  const animationFrameRef = useRef<number | null>(null);
+  const autoScrollOffsetRef = useRef(0);
+  const [selectedProduct, setSelectedProduct] = useState<GroupedProduct | null>(null);
 
-  // Sistema de categorÃ­as semÃ¡nticas para evitar productos irrelevantes
-  const productCategories = {
-    'carnes': {
-      name: 'Carnes y ProteÃ­nas',
-      icon: 'ðŸ¥©',
-      keywords: ['pollo', 'carne', 'pescado', 'jamÃ³n', 'salchicha', 'chorizo', 'bife', 'lomo', 'huevos'],
-      searchTerms: ['pollo entero', 'carne molida', 'pescado fresco', 'jamÃ³n cocido', 'huevos frescos']
-    },
-    'lÃ¡cteos': {
-      name: 'LÃ¡cteos',
-      icon: 'ðŸ¥›',
-      keywords: ['leche', 'yogur', 'queso', 'manteca', 'crema', 'mantequilla'],
-      searchTerms: ['leche entera', 'yogur natural', 'queso cremoso', 'manteca', 'queso rallado']
-    },
-    'panaderÃ­a': {
-      name: 'PanaderÃ­a',
-      icon: 'ðŸž',
-      keywords: ['pan', 'galleta', 'tostada', 'factura', 'medialuna', 'croissant'],
-      searchTerms: ['pan blanco', 'pan integral', 'galletas dulces', 'tostadas', 'facturas']
-    },
-    'bebidas': {
-      name: 'Bebidas',
-      icon: 'ðŸ¥¤',
-      keywords: ['agua', 'jugo', 'gaseosa', 'cerveza', 'vino', 'cafÃ©', 'tÃ©'],
-      searchTerms: ['coca cola', 'sprite', 'agua mineral', 'jugo de naranja', 'cerveza', 'vino tinto']
-    },
-    'frutas_verduras': {
-      name: 'Frutas y Verduras',
-      icon: 'ðŸ¥•',
-      keywords: ['tomate', 'cebolla', 'papa', 'zanahoria', 'lechuga', 'banana', 'manzana', 'naranja'],
-      searchTerms: ['tomate fresco', 'cebolla', 'papa', 'zanahoria', 'lechuga', 'banana', 'manzana', 'naranja']
-    },
-    'granos': {
-      name: 'Granos y Cereales',
-      icon: 'ðŸŒ¾',
-      keywords: ['arroz', 'fideos', 'avena', 'cereales', 'quinoa', 'lentejas', 'porotos'],
-      searchTerms: ['arroz blanco', 'fideos', 'avena', 'cereales', 'quinoa', 'lentejas']
-    },
-    'condimentos': {
-      name: 'Condimentos',
-      icon: 'ðŸ§‚',
-      keywords: ['aceite', 'sal', 'azÃºcar', 'vinagre', 'mayonesa', 'ketchup', 'mostaza'],
-      searchTerms: ['aceite de oliva', 'sal', 'azÃºcar', 'vinagre', 'mayonesa', 'ketchup']
-    },
-    'snacks': {
-      name: 'Snacks',
-      icon: 'ðŸ¿',
-      keywords: ['papas', 'galletas', 'chocolate', 'caramelos', 'frutos secos', 'chips'],
-      searchTerms: ['papas fritas', 'galletas dulces', 'chocolate', 'caramelos', 'frutos secos']
-    }
-  };
-
-  // FunciÃ³n para seleccionar categorÃ­as rotativas basadas en hora y dÃ­a
-  const getRotatedCategories = (): { category: string, searchTerm: string, categoryInfo: any }[] => {
-    const now = new Date();
-    const hour = now.getHours();
-    const dayOfWeek = now.getDay(); // 0 = domingo, 1 = lunes, etc.
-    
-    // Seleccionar categorÃ­as basÃ¡ndose en la hora del dÃ­a
-    let selectedCategories: string[] = [];
-    
-    if (hour >= 6 && hour < 12) {
-      // MaÃ±ana: desayuno
-      selectedCategories = ['lÃ¡cteos', 'panaderÃ­a', 'bebidas', 'granos'];
-      setRotationInfo('Desayuno â€¢ ' + now.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }));
-    } else if (hour >= 12 && hour < 18) {
-      // Tarde: almuerzo
-      selectedCategories = ['carnes', 'granos', 'frutas_verduras', 'condimentos'];
-      setRotationInfo('Almuerzo â€¢ ' + now.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }));
-    } else if (hour >= 18 && hour < 22) {
-      // Noche: cena
-      selectedCategories = ['carnes', 'lÃ¡cteos', 'frutas_verduras', 'bebidas'];
-      setRotationInfo('Cena â€¢ ' + now.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }));
-    } else {
-      // Madrugada: snacks
-      selectedCategories = ['snacks', 'bebidas', 'condimentos', 'panaderÃ­a'];
-      setRotationInfo('Snacks â€¢ ' + now.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }));
-    }
-    
-    // Agregar categorÃ­as especÃ­ficas del dÃ­a de la semana
-    const daySpecificCategories = [
-      ['bebidas', 'snacks'], // Domingo
-      ['bebidas', 'panaderÃ­a'], // Lunes
-      ['lÃ¡cteos', 'frutas_verduras'], // Martes
-      ['lÃ¡cteos', 'carnes'], // MiÃ©rcoles
-      ['bebidas', 'condimentos'], // Jueves
-      ['carnes', 'bebidas'], // Viernes
-      ['carnes', 'frutas_verduras'] // SÃ¡bado
-    ];
-    
-    selectedCategories = [...selectedCategories, ...daySpecificCategories[dayOfWeek]];
-    
-    // Mezclar y seleccionar 4 categorÃ­as Ãºnicas
-    const shuffled = selectedCategories.sort(() => 0.5 - Math.random());
-    const uniqueCategories = [...new Set(shuffled)].slice(0, 4);
-    
-    // Convertir a objetos con informaciÃ³n de categorÃ­a y tÃ©rmino de bÃºsqueda
-    return uniqueCategories.map(categoryKey => {
-      const categoryInfo = productCategories[categoryKey as keyof typeof productCategories];
-      // Seleccionar un tÃ©rmino de bÃºsqueda aleatorio de la categorÃ­a
-      const randomSearchTerm = categoryInfo.searchTerms[Math.floor(Math.random() * categoryInfo.searchTerms.length)];
-      
-      return {
-        category: categoryKey,
-        searchTerm: randomSearchTerm,
-        categoryInfo: categoryInfo
-      };
-    });
-  };
-
-  useEffect(() => {
-    loadPopularProducts();
-    
-    // Rotar productos populares cada 30 minutos
-    const rotationInterval = setInterval(() => {
-      console.log('ðŸ”„ Rotando productos populares automÃ¡ticamente...');
-      loadPopularProducts();
-    }, 30 * 60 * 1000); // 30 minutos
-    
-    return () => {
-      clearInterval(rotationInterval);
-    };
-  }, []);
-
-  const loadPopularProducts = async () => {
+  const loadPopularProducts = useCallback(async () => {
     setIsLoading(true);
+    setError(null);
+
     try {
-      console.log('ðŸ“Š Cargando productos populares por categorÃ­as...');
-      
-      // Obtener categorÃ­as rotativas basadas en la hora y dÃ­a
-      const rotatedCategories = getRotatedCategories();
-      console.log('ðŸ”„ CategorÃ­as seleccionadas para rotaciÃ³n:', rotatedCategories.map(c => `${c.categoryInfo.icon} ${c.categoryInfo.name}`));
-      
-      // Buscar solo 2 productos para mejorar performance inicial
-      const categoriesToLoad = rotatedCategories.slice(0, 2);
-      console.log('ðŸš€ Cargando productos por categorÃ­a:', categoriesToLoad.map(c => c.searchTerm));
-      
-      // Cargar productos con carga progresiva
-      const allProducts: GroupedProduct[] = [];
-      
-      for (let i = 0; i < categoriesToLoad.length; i++) {
-        const categoryData = categoriesToLoad[i];
-        const query = categoryData.searchTerm;
-        setLoadingProgress(`Cargando ${i + 1}/${categoriesToLoad.length}: ${categoryData.categoryInfo.icon} ${categoryData.categoryInfo.name}`);
-        
-        try {
-          console.log(`ðŸ” Buscando: ${query} (${categoryData.categoryInfo.name})`);
-          // Timeout ampliado (65s) para dar margen al scraping/n8n
-          const response = await Promise.race([
-            searchService.searchProducts(query),
-            new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('Timeout')), POPULAR_PRODUCTS_REQUEST_TIMEOUT)
-            )
-          ]) as any;
-          
-          // Procesar respuesta inmediatamente
-          if (response.status === 'found' && response.data && Array.isArray(response.data) && response.data.length > 0) {
-            const firstItem = response.data[0];
-            
-            if (firstItem && typeof firstItem === 'object' && firstItem.data && Array.isArray(firstItem.data)) {
-              const nestedData = firstItem.data;
-              
-              if (nestedData.length > 0) {
-                const firstProduct = nestedData[0];
-                
-                if (firstProduct && firstProduct.canonid && firstProduct.canonname) {
-                  // Procesar y validar supermercados
-                  const supermarkets = firstProduct.supermarkets
-                    .filter((supermarket: any) => 
-                      supermarket && 
-                      typeof supermarket === 'object' &&
-                      supermarket.super &&
-                      typeof supermarket.precio === 'number'
-                    )
-                    .map((supermarket: any) => ({
-                      supermercado: String(supermarket.super),
-                      precio: Number(supermarket.precio),
-                      stock: Boolean(supermarket.stock),
-                      url: String(supermarket.url || ''),
-                      capture: String(supermarket.capture || '')
-                    }));
-
-                  // Encontrar el supermercado mÃ¡s barato
-                  const cheapestSupermarket = supermarkets.length > 0 
-                    ? supermarkets.reduce((cheapest: any, current: any) => {
-                        return current.precio < cheapest.precio ? current : cheapest;
-                      }, supermarkets[0])
-                    : null;
-
-                  // Transformar SearchResult a GroupedProduct con informaciÃ³n de categorÃ­a
-                  const groupedProduct: GroupedProduct = {
-                    ean: firstProduct.ean,
-                    brand: firstProduct.brand,
-                    exact_weight: firstProduct.exact_weight,
-                    min_price: firstProduct.min_price,
-                    max_price: firstProduct.max_price,
-                    products: cheapestSupermarket ? [cheapestSupermarket] : [],
-                    total_supermarkets: supermarkets.length,
-                    alternative_names: [],
-                    display_name: firstProduct.canonname,
-                    has_stock: supermarkets.some((s: any) => s.stock),
-                    // NUEVO: InformaciÃ³n de categorÃ­a para el producto popular (propiedades adicionales)
-                    category: categoryData.category,
-                    categoryInfo: categoryData.categoryInfo,
-                    categoryIcon: categoryData.categoryInfo.icon,
-                    categoryName: categoryData.categoryInfo.name
-                  } as GroupedProduct & {
-                    category: string;
-                    categoryInfo: any;
-                    categoryIcon: string;
-                    categoryName: string;
-                  };
-                  
-                  // Agregar producto inmediatamente
-                  if (groupedProduct.products.length > 0) {
-                    allProducts.push(groupedProduct);
-                    setPopularProducts([...allProducts]); // Actualizar UI inmediatamente
-                    console.log(`âœ… Producto agregado: ${query} (${categoryData.categoryInfo.icon} ${categoryData.categoryInfo.name})`);
-                  }
-                }
-              }
-            }
-          }
-        } catch (error) {
-          console.error(`âŒ Error buscando ${query}:`, error);
-        }
+      const endpoint = getPopularProductsEndpoint();
+      const response = await fetch(endpoint, { method: 'GET' });
+      if (!response.ok) {
+        throw new Error(`Request failed with status ${response.status}`);
       }
-      
-      console.log('âœ… Todas las bÃºsquedas completadas');
-      
-      console.log(`DEBUG: Final allProducts before setting state:`, allProducts);
-      setPopularProducts(allProducts);
+
+      const payload = await response.json();
+      const normalized = normalizePopularProducts(payload);
+      setPopularProducts(normalized);
+      autoScrollOffsetRef.current = 0;
+      carouselRef.current?.scrollToOffset({ offset: 0, animated: false });
+      scrollX.setValue(0);
       setLastUpdate(new Date());
-      console.log(`âœ… Cargados ${allProducts.length} productos populares`);
-      
-    } catch (error) {
-      console.error('âŒ Error cargando productos populares:', error);
+    } catch (err) {
+      setError('No pudimos cargar los productos populares. Intenta nuevamente más tarde.');
+      console.error('[PopularProducts] Failed to fetch popular products:', err);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [scrollX]);
 
-  const handleProductPress = (query: string) => {
-    if (onProductSelect) {
-      onProductSelect(query);
+  useEffect(() => {
+    loadPopularProducts();
+    const interval = setInterval(loadPopularProducts, REFRESH_INTERVAL);
+    return () => clearInterval(interval);
+  }, [loadPopularProducts]);
+
+  const carouselData = useMemo(() => {
+    if (popularProducts.length > 1) {
+      return [...popularProducts, ...popularProducts];
     }
+    return popularProducts;
+  }, [popularProducts]);
+
+  useEffect(() => {
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+
+    if (carouselData.length <= 1) {
+      autoScrollOffsetRef.current = 0;
+      return;
+    }
+
+    const totalWidth = carouselData.length * CAROUSEL_ITEM_WIDTH;
+    let lastTimestamp = Date.now();
+
+    const step = () => {
+      const now = Date.now();
+      const deltaSeconds = Math.min((now - lastTimestamp) / 1000, 0.1);
+      lastTimestamp = now;
+
+      autoScrollOffsetRef.current = (autoScrollOffsetRef.current + AUTO_SCROLL_SPEED * deltaSeconds) % totalWidth;
+
+      carouselRef.current?.scrollToOffset({ offset: autoScrollOffsetRef.current, animated: false });
+      scrollX.setValue(autoScrollOffsetRef.current);
+
+      animationFrameRef.current = requestAnimationFrame(step);
+    };
+
+    animationFrameRef.current = requestAnimationFrame(step);
+
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+    };
+  }, [carouselData.length, scrollX]);
+
+  const handleSelectProduct = (product: GroupedProduct) => {
+    setSelectedProduct(product);
   };
 
-  const renderProduct = ({ item }: { item: GroupedProduct }) => {
-    console.log(`DEBUG: Rendering product in FlatList:`, item);
-    return (
-      <TouchableOpacity
-        onPress={() => handleProductPress(item.display_name)}
-        style={styles.productCard}
-      >
-        <GroupedProductCard
-          group={item}
-          onPress={() => handleProductPress(item.display_name)}
-        />
-      </TouchableOpacity>
-    );
-  };
+  const closeModal = () => setSelectedProduct(null);
 
-  const getLastUpdateText = () => {
+  const getLastUpdateText = (): string => {
     if (!lastUpdate) return '';
     const now = new Date();
-    const diffHours = Math.floor((now.getTime() - lastUpdate.getTime()) / (1000 * 60 * 60));
-    
-    if (diffHours < 1) return 'Actualizado hace menos de 1 hora';
+    const diffMinutes = Math.floor((now.getTime() - lastUpdate.getTime()) / (1000 * 60));
+    if (diffMinutes < 1) return 'Actualizado hace segundos';
+    if (diffMinutes === 1) return 'Actualizado hace 1 minuto';
+    if (diffMinutes < 60) return `Actualizado hace ${diffMinutes} minutos`;
+    const diffHours = Math.floor(diffMinutes / 60);
     if (diffHours === 1) return 'Actualizado hace 1 hora';
-    return `Actualizado hace ${diffHours} horas`;
+    if (diffHours < 24) return `Actualizado hace ${diffHours} horas`;
+    const diffDays = Math.floor(diffHours / 24);
+    return diffDays === 1 ? 'Actualizado hace 1 día' : `Actualizado hace ${diffDays} días`;
   };
 
-  if (isLoading) {
+  const renderProduct = ({ item, index }: { item: GroupedProduct; index: number }) => {
+    const inputRange = [
+      (index - 1) * CAROUSEL_ITEM_WIDTH,
+      index * CAROUSEL_ITEM_WIDTH,
+      (index + 1) * CAROUSEL_ITEM_WIDTH,
+    ];
+
+    const scale = scrollX.interpolate({ inputRange, outputRange: [0.9, 1, 0.9], extrapolate: 'clamp' });
+    const opacity = scrollX.interpolate({ inputRange, outputRange: [0.65, 1, 0.65], extrapolate: 'clamp' });
+
     return (
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <Ionicons name="trending-up" size={24} color="#007AFF" />
-          <Text style={styles.title}>Productos Populares</Text>
-        </View>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator color="#007AFF" size="small" />
-          <Text style={styles.loadingText}>
-            {loadingProgress || 'Cargando productos populares...'}
-          </Text>
-        </View>
+      <Animated.View style={[styles.carouselItem, { transform: [{ scale }], opacity }]}
+        key={`${item.ean}-${index}`}>
+        <PopularProductCard product={item} onPress={handleSelectProduct} onAdd={handleSelectProduct} />
+      </Animated.View>
+    );
+  };
+
+  const listEmptyComponent = () => {
+    if (isLoading) return null;
+    return (
+      <View style={styles.emptyState}>
+        <Text style={styles.emptyStateTitle}>Sin productos populares</Text>
+        <Text style={styles.emptyStateSubtitle}>Todavía no hay resultados disponibles desde n8n.</Text>
       </View>
     );
-  }
-
-  if (popularProducts.length === 0) {
-    return null;
-  }
+  };
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <View style={styles.titleContainer}>
-          <Ionicons name="trending-up" size={24} color="#007AFF" />
+          <Ionicons name="flame-outline" size={20} color="#FF6B6B" />
           <Text style={styles.title}>Productos Populares</Text>
         </View>
-        <TouchableOpacity 
-          onPress={loadPopularProducts} 
-          style={styles.refreshButton}
-          disabled={isLoading}
-        >
-          <Ionicons 
-            name="refresh" 
-            size={20} 
-            color={isLoading ? "#999" : "#007AFF"} 
-          />
+        <TouchableOpacity onPress={loadPopularProducts} style={styles.refreshButton}>
+          <Ionicons name="refresh-outline" size={20} color="#007bff" />
         </TouchableOpacity>
       </View>
-      
-      {rotationInfo && (
-        <View style={styles.rotationInfo}>
-          <Ionicons name="time" size={14} color="#666" />
-          <Text style={styles.rotationText}>{rotationInfo}</Text>
+
+      {lastUpdate && <Text style={styles.lastUpdateText}>{getLastUpdateText()}</Text>}
+      {error && <Text style={styles.errorText}>{error}</Text>}
+      {isLoading && (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="small" color="#007bff" />
+          <Text style={styles.loadingText}>Cargando productos populares...</Text>
         </View>
       )}
-      
-      {lastUpdate && (
-        <Text style={styles.lastUpdateText}>{getLastUpdateText()}</Text>
-      )}
-      
-      {/* InformaciÃ³n de categorÃ­as activas */}
-      <View style={styles.categoryInfo}>
-        <Text style={styles.categoryLabel}>CategorÃ­as activas:</Text>
-        <View style={styles.categoryTags}>
-          {popularProducts.slice(0, 3).map((product, index) => (
-            <View key={index} style={styles.categoryTag}>
-              <Text style={styles.categoryTagText}>
-                {(product as any).categoryIcon} {(product as any).categoryName}
-              </Text>
-            </View>
-          ))}
-        </View>
-      </View>
-      
-      <FlatList
-        data={popularProducts}
+
+      <Animated.FlatList
+        ref={carouselRef}
+        data={carouselData}
         renderItem={renderProduct}
-        keyExtractor={(item, index) => `popular-${item.ean}-${index}`}
+        keyExtractor={(_, index) => `popular-${index}`}
         horizontal
+        scrollEnabled={false}
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.productsList}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
+        snapToInterval={CAROUSEL_ITEM_WIDTH}
+        decelerationRate="fast"
+        ListEmptyComponent={listEmptyComponent}
       />
+
+      <Modal
+        visible={!!selectedProduct}
+        transparent
+        animationType="fade"
+        onRequestClose={closeModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Detalle del producto</Text>
+              <TouchableOpacity onPress={closeModal} style={styles.closeButton}>
+                <Ionicons name="close" size={20} color="#1f2937" />
+              </TouchableOpacity>
+            </View>
+
+            {selectedProduct && (
+              <ScrollView style={styles.modalScroll}>
+                <ProductHeader group={selectedProduct} />
+
+                <View style={styles.modalDivider} />
+
+                <View style={styles.modalSection}>
+                  <Text style={styles.sectionLabel}>
+                    Precios por supermercado ({selectedProduct.total_supermarkets || selectedProduct.products.length})
+                  </Text>
+                  {selectedProduct.products.map((productItem, index) => {
+                    const name = productItem.supermercado
+                      ? productItem.supermercado.replace(/\b\w/g, (c: string) => c.toUpperCase())
+                      : 'Sin nombre';
+
+                    const openLink = async () => {
+                      if (!productItem.url) {
+                        Alert.alert('Aviso', 'No hay enlace disponible para este producto.');
+                        return;
+                      }
+
+                      try {
+                        const supported = await Linking.canOpenURL(productItem.url);
+                        if (supported) {
+                          await Linking.openURL(productItem.url);
+                        } else {
+                          Alert.alert('Aviso', 'No se puede abrir este enlace');
+                        }
+                      } catch (error) {
+                        console.error('Error abriendo enlace:', error);
+                        Alert.alert('Aviso', 'Error al abrir el enlace');
+                      }
+                    };
+
+                    return (
+                      <View key={`${productItem.supermercado}_${index}`} style={styles.supermarketRow}>
+                        <View style={styles.supermarketInfo}>
+                          <Text style={styles.supermarketRowName}>{name}</Text>
+                          <Text style={styles.supermarketRowPrice}>{formatPrice(productItem.precio)}</Text>
+                        </View>
+                        <View style={styles.supermarketActions}>
+                          <Text
+                            style={[
+                              styles.supermarketRowStock,
+                              { color: productItem.stock ? '#10B981' : '#EF4444' },
+                            ]}
+                          >
+                            {productItem.stock ? 'En stock' : 'Sin stock'}
+                          </Text>
+                          {productItem.url ? (
+                            <TouchableOpacity style={styles.linkButton} onPress={openLink}>
+                              <Text style={styles.linkButtonText}>Ver producto</Text>
+                            </TouchableOpacity>
+                          ) : null}
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+
+                <View style={styles.modalButtonRow}>
+                  <TouchableOpacity style={styles.secondaryButton}>
+                    <Ionicons name="notifications-outline" size={16} color="#007bff" />
+                    <Text style={styles.secondaryButtonText}>Crear alerta</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.secondaryButton}>
+                    <Ionicons name="time-outline" size={16} color="#007bff" />
+                    <Text style={styles.secondaryButtonText}>Ver historial</Text>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -392,18 +474,6 @@ const styles = StyleSheet.create({
     color: '#333',
     marginLeft: 8,
   },
-  rotationInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    marginBottom: 4,
-  },
-  rotationText: {
-    fontSize: 12,
-    color: '#666',
-    marginLeft: 4,
-    fontStyle: 'italic',
-  },
   refreshButton: {
     padding: 4,
   },
@@ -414,11 +484,16 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     fontStyle: 'italic',
   },
+  errorText: {
+    color: '#dc3545',
+    paddingHorizontal: 16,
+    marginBottom: 8,
+  },
   loadingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 20,
+    paddingVertical: 12,
   },
   loadingText: {
     marginLeft: 8,
@@ -426,51 +501,141 @@ const styles = StyleSheet.create({
   },
   productsList: {
     paddingHorizontal: 16,
+    paddingBottom: 8,
   },
-  productCard: {
-    width: 300, // Aumentado para mejor visualizaciÃ³n
-    marginRight: 16, // MÃ¡s espacio entre tarjetas
-    backgroundColor: '#2C2C2C',
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 5,
+  carouselItem: {
+    width: CAROUSEL_ITEM_WIDTH,
   },
-  separator: {
-    width: 16,
+  emptyState: {
+    width: 220,
+    padding: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#e6eef7',
+    backgroundColor: '#f9fbfd',
+    marginRight: 16,
   },
-  categoryInfo: {
-    paddingHorizontal: 16,
-    marginBottom: 12,
+  emptyStateTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 4,
   },
-  categoryLabel: {
-    fontSize: 12,
+  emptyStateSubtitle: {
+    fontSize: 13,
     color: '#6c757d',
-    marginBottom: 6,
-    fontWeight: '500',
   },
-  categoryTags: {
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: '92%',
+    maxHeight: '85%',
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    padding: 20,
+  },
+  modalHeader: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  closeButton: {
+    padding: 6,
+  },
+  modalScroll: {
+    maxHeight: '90%',
+  },
+  modalDivider: {
+    height: 1,
+    backgroundColor: '#e5e7eb',
+    marginVertical: 12,
+  },
+  modalSection: {
+    marginBottom: 20,
+  },
+  sectionLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 10,
+  },
+  supermarketRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  supermarketInfo: {
+    flex: 1,
+  },
+  supermarketActions: {
+    alignItems: 'flex-end',
     gap: 6,
   },
-  categoryTag: {
-    backgroundColor: '#f0f8ff',
-    paddingHorizontal: 8,
+  supermarketRowName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  supermarketRowPrice: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#2563eb',
+    marginTop: 4,
+  },
+  supermarketRowStock: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  linkButton: {
     paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: '#e0edff',
+  },
+  linkButtonText: {
+    color: '#1d4ed8',
+    fontWeight: '600',
+    fontSize: 12,
+  },
+  modalButtonRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  secondaryButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#007bff',
   },
-  categoryTagText: {
-    fontSize: 11,
+  secondaryButtonText: {
     color: '#007bff',
-    fontWeight: '500',
+    fontWeight: '600',
+    marginLeft: 6,
   },
 });
 
 export default PopularProducts;
+
+
+
+
+
+
 

@@ -13,7 +13,6 @@ interface ProductFooterProps {
 export const ProductFooter = React.memo<ProductFooterProps>(({ group }) => {
   return (
     <View style={styles.footer}>
-      <Text style={styles.ean}>EAN: {group.ean}</Text>
       <View style={[
         styles.stockIndicator, 
         { backgroundColor: group.has_stock ? '#4CAF50' : '#F44336' }
@@ -33,10 +32,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-  },
-  ean: {
-    fontSize: 12,
-    color: '#CCCCCC',
   },
   stockIndicator: {
     paddingHorizontal: 8,

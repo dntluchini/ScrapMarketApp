@@ -1,5 +1,43 @@
 import { getApiConfig, isFeatureEnabled } from '../config/environment';
 
+// Normalize the base URL so that we always point to the n8n host (no workflow path)
+const normalizeBaseUrl = (rawBaseUrl: string): string => {
+  if (!rawBaseUrl) {
+    return '';
+  }
+
+  // Legacy fallback: if manifest still sirve la IP vieja, forzar migración
+  const legacyHost = '192.168.0.158';
+  const currentHost = '192.168.1.99';
+  if (rawBaseUrl.includes(legacyHost)) {
+    rawBaseUrl = rawBaseUrl.replace(legacyHost, currentHost);
+  }
+
+  try {
+    const parsedUrl = new URL(rawBaseUrl);
+    let basePath = parsedUrl.pathname || '';
+
+    // If the path already contains /webhook/... remove everything from there on
+    const webhookIndex = basePath.indexOf('/webhook');
+    if (webhookIndex !== -1) {
+      basePath = basePath.slice(0, webhookIndex);
+    }
+
+    // Trim trailing slash (keeping root path empty)
+    if (basePath === '/') {
+      basePath = '';
+    } else if (basePath.endsWith('/')) {
+      basePath = basePath.slice(0, -1);
+    }
+
+    const normalized = `${parsedUrl.origin}${basePath}`;
+    return normalized.endsWith('/') ? normalized.slice(0, -1) : normalized;
+  } catch (error) {
+    console.warn('Warning: invalid API base URL format. Falling back to basic cleanup.', error);
+    return rawBaseUrl.replace(/\/webhook\/?.*$/, '').replace(/\/$/, '');
+  }
+};
+
 // n8n MCP Configuration Interface
 export interface N8nMcpConfig {
   baseUrl: string;
@@ -41,10 +79,9 @@ class N8nMcpService {
 
   constructor() {
     const apiConfig = getApiConfig();
-    
-    // Extract base URL from environment config - remove the endpoint part
-    const baseUrl = apiConfig.baseUrl.replace('/webhook/search-products-complete?q=', '');
-    
+    const debugLogging = isFeatureEnabled('DEBUG_LOGGING');
+    const baseUrl = normalizeBaseUrl(apiConfig.baseUrl);
+
     this.config = {
       baseUrl,
       webhook: '/webhook',
@@ -52,8 +89,13 @@ class N8nMcpService {
       timeout: apiConfig.timeout,
       retries: apiConfig.retries,
       cors: true,
-      logging: isFeatureEnabled('DEBUG_LOGGING'),
+      logging: debugLogging,
     };
+
+    if (debugLogging) {
+      console.log('[n8nMcpService] Base URL (raw):', apiConfig.baseUrl);
+      console.log('[n8nMcpService] Base URL (normalized):', baseUrl);
+    }
 
     this.workflows = {
       products: {

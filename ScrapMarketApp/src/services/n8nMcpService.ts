@@ -1,5 +1,43 @@
 import { getApiConfig, isFeatureEnabled } from '../config/environment';
 
+// Normalize the base URL so that we always point to the n8n host (no workflow path)
+const normalizeBaseUrl = (rawBaseUrl: string): string => {
+  if (!rawBaseUrl) {
+    return '';
+  }
+
+  // Legacy fallback: if manifest still sirve la IP vieja, forzar migración
+  const legacyHost = '192.168.0.158';
+  const currentHost = '192.168.1.99';
+  if (rawBaseUrl.includes(legacyHost)) {
+    rawBaseUrl = rawBaseUrl.replace(legacyHost, currentHost);
+  }
+
+  try {
+    const parsedUrl = new URL(rawBaseUrl);
+    let basePath = parsedUrl.pathname || '';
+
+    // If the path already contains /webhook/... remove everything from there on
+    const webhookIndex = basePath.indexOf('/webhook');
+    if (webhookIndex !== -1) {
+      basePath = basePath.slice(0, webhookIndex);
+    }
+
+    // Trim trailing slash (keeping root path empty)
+    if (basePath === '/') {
+      basePath = '';
+    } else if (basePath.endsWith('/')) {
+      basePath = basePath.slice(0, -1);
+    }
+
+    const normalized = `${parsedUrl.origin}${basePath}`;
+    return normalized.endsWith('/') ? normalized.slice(0, -1) : normalized;
+  } catch (error) {
+    console.warn('Warning: invalid API base URL format. Falling back to basic cleanup.', error);
+    return rawBaseUrl.replace(/\/webhook\/?.*$/, '').replace(/\/$/, '');
+  }
+};
+
 // n8n MCP Configuration Interface
 export interface N8nMcpConfig {
   baseUrl: string;
@@ -41,10 +79,9 @@ class N8nMcpService {
 
   constructor() {
     const apiConfig = getApiConfig();
-    
-    // Extract base URL from environment config - remove the endpoint part
-    const baseUrl = apiConfig.baseUrl.replace('/webhook/search-products-complete?q=', '');
-    
+    const debugLogging = isFeatureEnabled('DEBUG_LOGGING');
+    const baseUrl = normalizeBaseUrl(apiConfig.baseUrl);
+
     this.config = {
       baseUrl,
       webhook: '/webhook',
@@ -52,8 +89,13 @@ class N8nMcpService {
       timeout: apiConfig.timeout,
       retries: apiConfig.retries,
       cors: true,
-      logging: isFeatureEnabled('DEBUG_LOGGING'),
+      logging: debugLogging,
     };
+
+    if (debugLogging) {
+      console.log('[n8nMcpService] Base URL (raw):', apiConfig.baseUrl);
+      console.log('[n8nMcpService] Base URL (normalized):', baseUrl);
+    }
 
     this.workflows = {
       products: {
@@ -95,28 +137,28 @@ class N8nMcpService {
     };
 
     if (this.config.logging) {
-      console.log(`🔄 n8n MCP Request: ${url}`, requestOptions);
+      console.log(`📡 n8n MCP Request: ${url}`, requestOptions);
     }
 
     try {
       // Add timeout to prevent hanging requests
       const controller = new AbortController();
       const timeoutId = setTimeout(() => {
-        console.warn(`⏰ n8n MCP Request timeout after ${this.config.timeout}ms`);
+        console.warn(`⏳ n8n MCP Request timeout after ${this.config.timeout}ms`);
         controller.abort();
       }, this.config.timeout);
-      
+
       const response = await fetch(url, {
         ...requestOptions,
         signal: controller.signal,
       });
-      
+
       clearTimeout(timeoutId);
-      
+
       if (this.config.logging) {
         console.log(`✅ n8n MCP Response: ${response.status}`, response);
       }
-      
+
       return response;
     } catch (error) {
       // No reintentar si es un error de aborto (timeout)
@@ -124,13 +166,13 @@ class N8nMcpService {
         console.error('❌ n8n MCP Request aborted (timeout)');
         throw new Error(`Request timeout after ${this.config.timeout}ms. The scraping process may be taking longer than expected.`);
       }
-      
+
       if (retryCount < this.config.retries) {
         console.warn(`⚠️ n8n MCP Request failed, retrying... (${retryCount + 1}/${this.config.retries})`);
         await new Promise(resolve => setTimeout(resolve, 2000 * (retryCount + 1))); // Aumentar delay entre reintentos
         return this.makeRequest(url, options, retryCount + 1);
       }
-      
+
       console.error('❌ n8n MCP Request failed after retries:', error);
       throw error;
     }
@@ -141,7 +183,7 @@ class N8nMcpService {
     // Add data saver mode parameter to URL
     const dataSaverParam = dataSaverMode ? '&dataSaverMode=true' : '';
     const url = `${this.config.baseUrl}${this.workflows.products.endpoint}?${this.workflows.products.queryParam}=${encodeURIComponent(query)}${dataSaverParam}`;
-    
+
     const response = await this.makeRequest(url, {
       method: this.workflows.products.method,
     }, 0, dataSaverMode);
@@ -150,16 +192,16 @@ class N8nMcpService {
       throw new Error(`n8n Products API error: ${response.status}`);
     }
 
-        // Check if response has content
-        const text = await response.text();
-        console.log('🔍 Raw response text length:', text.length);
-        console.log('🔍 Raw response text preview:', text.substring(0, 200));
-        console.log('🔍 Full response text:', text);
+    // Check if response has content
+    const text = await response.text();
+    console.log('🔍 Raw response text length:', text.length);
+    console.log('🔍 Raw response text preview:', text.substring(0, 200));
+    console.log('🔍 Full response text:', text);
 
-        if (!text || text.trim() === '') {
-          console.warn('⚠️ n8n returned empty response');
-          return [];
-        }
+    if (!text || text.trim() === '') {
+      console.warn('⚠️ n8n returned empty response');
+      return [];
+    }
 
     try {
       const parsed = JSON.parse(text);
@@ -177,7 +219,7 @@ class N8nMcpService {
   // Search products in database only (no scraping)
   async searchProductsInDatabaseOnly(query: string): Promise<any> {
     const url = `${this.config.baseUrl}/webhook/search-in-db?q=${encodeURIComponent(query)}`;
-    
+
     const response = await this.makeRequest(url, {
       method: 'GET',
     });
@@ -207,7 +249,7 @@ class N8nMcpService {
   // Get prices per market using n8n workflow
   async getPricesPerMarket(canonname: string): Promise<any> {
     const url = `${this.config.baseUrl}${this.workflows.prices.endpoint}?${this.workflows.prices.queryParam}=${encodeURIComponent(canonname)}`;
-    
+
     const response = await this.makeRequest(url, {
       method: this.workflows.prices.method,
     });
@@ -222,7 +264,7 @@ class N8nMcpService {
   // Create user alert using n8n workflow
   async createUserAlert(alertData: any): Promise<any> {
     const url = `${this.config.baseUrl}${this.workflows.alerts.endpoint}`;
-    
+
     const response = await this.makeRequest(url, {
       method: this.workflows.alerts.method,
       body: JSON.stringify(alertData),
@@ -238,7 +280,7 @@ class N8nMcpService {
   // Get price history using n8n workflow
   async getPriceHistory(canonid: string): Promise<any> {
     const url = `${this.config.baseUrl}${this.workflows.history.endpoint}/${canonid}`;
-    
+
     const response = await this.makeRequest(url, {
       method: this.workflows.history.method,
     });
@@ -267,7 +309,7 @@ class N8nMcpService {
       // Don't call any workflow endpoints to avoid triggering scraping
       const url = `${this.config.baseUrl}/`;
       const response = await this.makeRequest(url, { method: 'GET' });
-      
+
       // Consider connection successful if we get any response
       return response.ok;
     } catch (error) {

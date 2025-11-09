@@ -7,6 +7,7 @@ export interface Product {
   exact_weight: string;
   stock: boolean;
   url: string;
+  imageUrl?: string;
   brand?: string; // ← Nueva propiedad brand del backend
   brandId?: string; // ← ID de la marca si está disponible
   sku?: string;
@@ -28,6 +29,7 @@ export interface GroupedProduct {
   alternative_names: string[];
   display_name: string;
   has_stock: boolean;
+  imageUrl?: string;
   best_price?: Product;
 }
 

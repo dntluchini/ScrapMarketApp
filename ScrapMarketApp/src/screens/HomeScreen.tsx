@@ -70,6 +70,12 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           <Text style={styles.searchButtonText}>Buscar productos...</Text>
         </TouchableOpacity>
 
+        {/* Alert Banner */}
+        <View style={styles.alertBanner}>
+          <Ionicons name="alert-circle" size={16} color="#b45309" style={styles.alertIcon} />
+          <Text style={styles.alertText}>Verifica los precios finales en la web del supermercado; pueden existir promociones vigentes.</Text>
+        </View>
+
         {/* Quick Search */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Búsquedas Rápidas</Text>
@@ -180,6 +186,26 @@ const styles = StyleSheet.create({
     marginLeft: 12,
     fontSize: 16,
     color: '#6c757d',
+  },
+  alertBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff7ed',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#fcd34d',
+    padding: 12,
+    marginHorizontal: 16,
+    marginBottom: 12,
+  },
+  alertIcon: {
+    marginRight: 8,
+  },
+  alertText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#92400e',
+    fontWeight: '600',
   },
   section: {
     marginBottom: 24,

@@ -1,21 +1,19 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { cleanProductName, formatPrice } from '../../utils/productNameUtils';
+import { View, Text, StyleSheet, Image } from 'react-native';
+import { formatPrice } from '../../utils/productNameUtils';
 import { GroupedProduct, productGroupingService } from '../../services/productGroupingService';
 
 interface ProductHeaderProps {
   group: GroupedProduct;
 }
 
-/**
- * Componente optimizado para el header del producto
- * Memoizado para evitar re-renders innecesarios
- */
 export const ProductHeader = React.memo<ProductHeaderProps>(({ group }) => {
-  // Usar la función de formateo con marca
   const formattedName = productGroupingService.formatProductNameWithBrand(group);
-  
-  // Para productos populares, mostrar solo el precio más barato
+  const productImage =
+    group.imageUrl ||
+    group.best_price?.imageUrl ||
+    group.products.find(product => product.imageUrl)?.imageUrl;
+
   const isPopularProduct = group.products.length === 1;
   const priceRange = isPopularProduct
     ? formatPrice(group.min_price)
@@ -25,14 +23,15 @@ export const ProductHeader = React.memo<ProductHeaderProps>(({ group }) => {
 
   return (
     <View style={styles.header}>
+      {productImage ? (
+        <Image source={{ uri: productImage }} style={styles.productImage} resizeMode="contain" />
+      ) : null}
       <View style={styles.productInfo}>
         <Text style={styles.productName} numberOfLines={2}>
           {formattedName}
         </Text>
         <View style={styles.priceContainer}>
-          <Text style={styles.priceRange}>
-            {priceRange}
-          </Text>
+          <Text style={styles.priceRange}>{priceRange}</Text>
           {isPopularProduct && (
             <View style={styles.bestPriceBadge}>
               <Text style={styles.bestPriceText}>MEJOR PRECIO</Text>
@@ -42,9 +41,7 @@ export const ProductHeader = React.memo<ProductHeaderProps>(({ group }) => {
       </View>
       <View style={styles.priceInfo}>
         <Text style={styles.minPriceLabel}>Min:</Text>
-        <Text style={styles.minPrice}>
-          {formatPrice(group.min_price)}
-        </Text>
+        <Text style={styles.minPrice}>{formatPrice(group.min_price)}</Text>
       </View>
     </View>
   );
@@ -58,6 +55,13 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: 12,
+  },
+  productImage: {
+    width: 64,
+    height: 64,
+    borderRadius: 8,
+    marginRight: 12,
+    backgroundColor: '#1F1F1F',
   },
   productInfo: {
     flex: 1,
@@ -108,7 +112,3 @@ const styles = StyleSheet.create({
     color: '#4CAF50',
   },
 });
-
-
-
-

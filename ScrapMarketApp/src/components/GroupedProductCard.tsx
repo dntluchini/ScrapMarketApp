@@ -101,10 +101,6 @@ export const GroupedProductCard = React.memo<GroupedProductCardProps>(({
               </TouchableOpacity>
             </View>
             
-            <View style={styles.modalInfo}>
-              <Text style={styles.modalEan}>EAN: {group.ean}</Text>
-            </View>
-            
             <ScrollView style={styles.supermarketsList}>
               <Text style={styles.modalTitle}>Precios por Supermercado:</Text>
               <FlatList

@@ -162,12 +162,6 @@ export default function ProductDetailsScreen({ route, navigation }: ProductDetai
             {product.total_supermarkets || (product.products ? product.products.length : 0)} supermercados
           </Text>
         </View>
-        {product.exact_weight && (
-          <Text style={styles.productWeight}>Peso: {product.exact_weight}</Text>
-        )}
-        {product.ean && (
-          <Text style={styles.productEan}>EAN: {product.ean}</Text>
-        )}
       </View>
 
       {/* Supermarkets List */}
@@ -386,16 +380,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
   },
-  productWeight: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 4,
-  },
-  productEan: {
-    fontSize: 12,
-    color: '#999',
-    marginTop: 2,
-  },
   section: {
     backgroundColor: '#fff',
     marginTop: 8,
@@ -586,3 +570,5 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
 });
+
+

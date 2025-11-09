@@ -53,7 +53,7 @@ const getBooleanEnvVar = (key: string, defaultValue: boolean = false): boolean =
 // Development configuration (local n8n in Docker)
 // NOTE: Use local IP (186.127.125.134) instead of localhost for mobile device access
 const developmentConfig: EnvironmentConfig = {
-  API_BASE_URL: getEnvVar('apiBaseUrl', 'http://192.168.0.158:5678/webhook/search-products-complete?q='),
+  API_BASE_URL: getEnvVar('apiBaseUrl', 'http://192.168.1.99:5678'),
   API_TIMEOUT: 120000, // 2 minutes for scraping
   API_RETRIES: 2,
   SUPABASE_URL: getEnvVar('supabaseUrl', ''),
