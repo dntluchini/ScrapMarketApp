@@ -12,7 +12,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { GroupedProduct, productGroupingService } from '../services/productGroupingService';
 import { useProductModal } from '../hooks/useProductModal';
 import { ProductHeader } from './ProductCard/ProductHeader';
-import { ProductFooter } from './ProductCard/ProductFooter';
 import { SupermarketItem } from './ProductCard/SupermarketItem';
 
 interface GroupedProductCardProps {
@@ -24,6 +23,12 @@ interface GroupedProductCardProps {
  * Componente optimizado para mostrar productos agrupados
  * Sigue buenas practicas de React Native para performance
  */
+const capitalizeTitle = (value: string): string =>
+  value
+    ?.split(' ')
+    .map(word => (word ? word[0].toUpperCase() + word.slice(1) : ''))
+    .join(' ') || '';
+
 export const GroupedProductCard = React.memo<GroupedProductCardProps>(({
   group,
   onPress,
@@ -68,15 +73,6 @@ export const GroupedProductCard = React.memo<GroupedProductCardProps>(({
 
         <View style={styles.divider} />
 
-        <View style={styles.supermarketsHeader}>
-          <Text style={styles.supermarketsTitle}>Compar\u00E1 precios</Text>
-          <View style={styles.supermarketsBadge}>
-            <Text style={styles.supermarketsBadgeText}>
-              {group.products.length} oferta{group.products.length === 1 ? '' : 's'}
-            </Text>
-          </View>
-        </View>
-
         <View style={styles.supermarketsList}>
           {group.products.map((productItem: any, index: number) => (
             <SupermarketItem
@@ -87,7 +83,6 @@ export const GroupedProductCard = React.memo<GroupedProductCardProps>(({
           ))}
         </View>
 
-        <ProductFooter group={group} />
       </TouchableOpacity>
 
       {/* Modal con detalles */}
@@ -101,7 +96,7 @@ export const GroupedProductCard = React.memo<GroupedProductCardProps>(({
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
-                {productGroupingService.formatProductNameWithBrand(group)}
+                {capitalizeTitle(productGroupingService.formatProductNameWithBrand(group))}
               </Text>
               <TouchableOpacity
                 style={styles.closeButton}
@@ -147,28 +142,6 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: '#e5e7eb',
     marginVertical: 16,
-  },
-  supermarketsHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  supermarketsTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#111827',
-  },
-  supermarketsBadge: {
-    backgroundColor: '#e0edff',
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-  },
-  supermarketsBadgeText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#1d4ed8',
   },
   supermarketsList: {
     marginBottom: 16,

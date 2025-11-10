@@ -34,7 +34,6 @@ const QUICK_SEARCH_ITEMS: QuickSearchItem[] = [
 ];
 
 const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
-  const [dataSaverMode, setDataSaverMode] = useState(false);
   const [quickSearchLoading, setQuickSearchLoading] = useState<string | null>(null);
 
   const handleProductSelect = (query: string) => {
@@ -152,16 +151,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             <Text style={styles.greeting}>¡Hola! 👋</Text>
             <Text style={styles.subtitle}>Encuentra los mejores precios</Text>
           </View>
-          <TouchableOpacity
-            style={[styles.dataSaverToggle, dataSaverMode && styles.dataSaverActive]}
-            onPress={() => setDataSaverMode(!dataSaverMode)}
-          >
-            <Ionicons
-              name={dataSaverMode ? 'leaf' : 'leaf-outline'}
-              size={20}
-              color={dataSaverMode ? '#28a745' : '#6c757d'}
-            />
-          </TouchableOpacity>
+          
         </View>
 
         <TouchableOpacity
@@ -187,37 +177,6 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         </View>
 
         <PopularProducts onProductSelect={handleProductSelect} />
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Características</Text>
-          <View style={styles.featuresList}>
-            <View style={styles.featureItem}>
-              <Ionicons name="flash" size={20} color="#28a745" />
-              <Text style={styles.featureText}>Resultados en 0.5-2 segundos</Text>
-            </View>
-            <View style={styles.featureItem}>
-              <Ionicons name="trending-up" size={20} color="#007AFF" />
-              <Text style={styles.featureText}>Comparación de precios en tiempo real</Text>
-            </View>
-            <View style={styles.featureItem}>
-              <Ionicons name="notifications" size={20} color="#FF9800" />
-              <Text style={styles.featureText}>Alertas de ofertas</Text>
-            </View>
-            <View style={styles.featureItem}>
-              <Ionicons name="leaf" size={20} color="#28a745" />
-              <Text style={styles.featureText}>Modo ahorro de datos</Text>
-            </View>
-          </View>
-        </View>
-
-        {dataSaverMode && (
-          <View style={styles.dataSaverInfo}>
-            <Ionicons name="information-circle" size={20} color="#28a745" />
-            <Text style={styles.dataSaverInfoText}>
-              Modo ahorro activo: Reduce consumo de datos móviles en 50%
-            </Text>
-          </View>
-        )}
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>ScrapMarket v1.0 • Optimizado para móvil</Text>
@@ -252,17 +211,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#6c757d',
     marginTop: 4,
-  },
-  dataSaverToggle: {
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#e9ecef',
-  },
-  dataSaverActive: {
-    borderColor: '#28a745',
-    backgroundColor: '#f8fff8',
   },
   searchButton: {
     flexDirection: 'row',
@@ -339,42 +287,6 @@ const styles = StyleSheet.create({
     color: '#333',
     textAlign: 'center',
   },
-  featuresList: {
-    paddingHorizontal: 16,
-  },
-  featureItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    padding: 16,
-    marginBottom: 8,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e9ecef',
-  },
-  featureText: {
-    marginLeft: 12,
-    fontSize: 14,
-    color: '#333',
-    flex: 1,
-  },
-  dataSaverInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#e8f5e8',
-    marginHorizontal: 16,
-    marginBottom: 24,
-    padding: 16,
-    borderRadius: 12,
-    borderLeftWidth: 3,
-    borderLeftColor: '#28a745',
-  },
-  dataSaverInfoText: {
-    marginLeft: 12,
-    fontSize: 14,
-    color: '#28a745',
-    flex: 1,
-  },
   footer: {
     padding: 20,
     alignItems: 'center',
@@ -387,4 +299,6 @@ const styles = StyleSheet.create({
 });
 
 export default HomeScreen;
+
+
 

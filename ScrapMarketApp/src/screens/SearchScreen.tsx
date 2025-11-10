@@ -15,6 +15,60 @@ interface SearchScreenProps {
   route?: any;
 }
 
+const resolveImageUrl = (payload: any): string | undefined => {
+  if (!payload || typeof payload !== 'object') {
+    return undefined;
+  }
+
+  const candidateValues = [
+    payload.imageUrl,
+    payload.image_url,
+    payload.imageurl,
+    payload.imgUrl,
+    payload.img_url,
+    payload.imgurl,
+    payload.image,
+    payload.img,
+    payload.thumbnail,
+    payload.photo,
+    payload.picture,
+    payload.productImage,
+    payload.product_image,
+    payload.product_image_url,
+  ];
+
+  for (const value of candidateValues) {
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (trimmed.length > 0) {
+        return trimmed;
+      }
+    }
+    if (Array.isArray(value)) {
+      const nested = value.find(v => typeof v === 'string' && v.trim().length > 0);
+      if (nested) {
+        return nested.trim();
+      }
+    }
+  }
+
+  if (Array.isArray(payload.images)) {
+    const image = payload.images.find((img: any) => typeof img === 'string' && img.trim().length > 0);
+    if (image) {
+      return image.trim();
+    }
+  }
+
+  if (Array.isArray(payload.imageUrls)) {
+    const image = payload.imageUrls.find((img: any) => typeof img === 'string' && img.trim().length > 0);
+    if (image) {
+      return image.trim();
+    }
+  }
+
+  return undefined;
+};
+
 const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route }) => {
   const [searchQuery, setSearchQuery] = useState(route?.params?.initialQuery || '');
   const [products, setProducts] = useState<Product[]>([]);
@@ -38,10 +92,10 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route }) => {
   const [scrapingStartTime, setScrapingStartTime] = useState<number | null>(null);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [isProgressiveLoading, setIsProgressiveLoading] = useState(false);
-  const [dataSaverMode, setDataSaverMode] = useState(false);
-  const [dbOnlyMode, setDbOnlyMode] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-
+  const dataSaverMode = false;
+  const dbOnlyMode = false;
+  const showEmptyState = !isLoading && !isSearching && !isScraping && filteredGroups.length === 0 && scrapedProducts.length === 0;
   // Test n8n MCP connection on component mount - DISABLED TO PREVENT AUTO-EXECUTIONS
   React.useEffect(() => {
     // Temporarily disable connection test to prevent automatic API calls
@@ -391,36 +445,53 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route }) => {
         
         // Convert grouped data to GroupedProduct interface
         console.log('🔍 Converting', productsArray.length, 'database products to GroupedProduct');
-        groupedProducts = productsArray.map((item: any) => ({
-          ean: item.ean || 'NO_EAN',
-          exact_weight: item.exact_weight || 'UNKNOWN',
-          brand: item.brand || undefined,
-          brandId: item.brandId || undefined,
-          products: item.supermarkets.map((supermarket: any) => ({
-            canonid: item.canonid || '',
-            canonname: item.canonname || '',
-            brand: item.brand || undefined,
-            brandId: item.brandId || undefined,
-            precio: parseFloat(supermarket.precio || item.min_price || 0),
-            supermercado: supermarket.super || 'unknown',
+        groupedProducts = productsArray.map((item: any) => {
+          const groupImage = resolveImageUrl(item);
+          const mappedProducts: Product[] = item.supermarkets.map((supermarket: any) => {
+            const productImage = resolveImageUrl(supermarket) || groupImage;
+            return {
+              canonid: item.canonid || '',
+              canonname: item.canonname || '',
+              brand: item.brand || undefined,
+              brandId: item.brandId || undefined,
+              precio: parseFloat(supermarket.precio || item.min_price || 0),
+              supermercado: supermarket.super || 'unknown',
+              ean: item.ean || 'NO_EAN',
+              exact_weight: item.exact_weight || 'UNKNOWN',
+              stock: supermarket.stock !== undefined ? Boolean(supermarket.stock) : true,
+              url: supermarket.url || '',
+              sku: '',
+              skuRef: '',
+              storeBase: '',
+              site: '',
+              relevance: 0,
+              imageUrl: productImage,
+            };
+          });
+
+          const bestPrice =
+            mappedProducts.length > 0
+              ? mappedProducts.reduce((best, current) =>
+                  current.precio < best.precio ? current : best
+                )
+              : undefined;
+
+          return {
             ean: item.ean || 'NO_EAN',
             exact_weight: item.exact_weight || 'UNKNOWN',
-            stock: supermarket.stock || true,
-            url: supermarket.url || '',
-            sku: '',
-            skuRef: '',
-            storeBase: '',
-            site: '',
-            relevance: 0
-          })),
-          min_price: parseFloat(item.min_price || 0),
-          max_price: parseFloat(item.max_price || 0),
-          total_supermarkets: item.total_supermarkets || item.supermarkets.length,
-          alternative_names: item.alternative_names || [item.canonname],
-          display_name: item.canonname || '',
-          has_stock: item.supermarkets.some((s: any) => s.stock),
-          best_price: undefined
-        }));
+            brand: item.brand || undefined,
+            brandId: item.brandId || undefined,
+            products: mappedProducts,
+            min_price: parseFloat(item.min_price || 0),
+            max_price: parseFloat(item.max_price || 0),
+            total_supermarkets: item.total_supermarkets || item.supermarkets.length,
+            alternative_names: item.alternative_names || [item.canonname],
+            display_name: item.canonname || '',
+            has_stock: mappedProducts.some((s: Product) => s.stock),
+            imageUrl: groupImage || bestPrice?.imageUrl,
+            best_price: bestPrice,
+          };
+        });
         
         console.log('🔍 Converted to', groupedProducts.length, 'GroupedProducts');
         
@@ -470,7 +541,8 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route }) => {
             skuRef: item.skuRef || '',
             storeBase: item.storeBase || '',
             site: item.site || '',
-            relevance: item.relevance || 0
+            relevance: item.relevance || 0,
+            imageUrl: resolveImageUrl(item),
           };
         });
         
@@ -618,24 +690,6 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route }) => {
         </View>
         <View style={styles.searchActions}>
           <TouchableOpacity 
-            style={[styles.filtersButton, dataSaverMode && styles.dataSaverActive]}
-            onPress={() => setDataSaverMode(!dataSaverMode)}
-          >
-            <Ionicons name={dataSaverMode ? "leaf" : "leaf-outline"} size={20} color={dataSaverMode ? "#28a745" : "#6c757d"} />
-            <Text style={[styles.filtersButtonText, dataSaverMode && styles.dataSaverText]}>
-              {dataSaverMode ? 'Ahorro' : 'Normal'}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.filtersButton, dbOnlyMode && styles.dbOnlyActive]}
-            onPress={() => setDbOnlyMode(!dbOnlyMode)}
-          >
-            <Ionicons name={dbOnlyMode ? "server" : "server-outline"} size={20} color={dbOnlyMode ? "#007bff" : "#6c757d"} />
-            <Text style={[styles.filtersButtonText, dbOnlyMode && styles.dbOnlyText]}>
-              {dbOnlyMode ? 'Solo BD' : 'Completo'}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
             style={styles.filtersButton}
             onPress={() => setShowFilters(true)}
           >
@@ -664,8 +718,6 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route }) => {
           elapsedTime={elapsedTime}
           productCount={groupedProducts.length + scrapedProducts.length}
           isProgressiveLoading={isProgressiveLoading}
-          dataSaverMode={dataSaverMode}
-          dbOnlyMode={dbOnlyMode}
         />
         
         {/* Skeleton loading mientras carga */}
@@ -716,17 +768,22 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route }) => {
           />
         }
         ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Ionicons name="search" size={48} color="#ccc" />
-            <Text style={styles.emptyStateText}>
-              {connectionStatus === 'disconnected' 
-                ? 'Sin conexión a n8n. Verifica tu configuración.'
-                : searchQuery 
-                  ? filteredGroups.length === 0 && groupedProducts.length > 0
-                    ? 'No hay productos que coincidan con los filtros'
-                    : 'No se encontraron productos'
-                  : 'Busca productos para ver resultados'
-              }
+          showEmptyState ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="search" size="48" color="#ccc" />
+              <Text style={styles.emptyStateText}>
+                {connectionStatus === 'disconnected' 
+                  ? 'Sin conexi??n a n8n. Verifica tu configuraci??n.'
+                  : searchQuery 
+                    ? filteredGroups.length === 0 && groupedProducts.length > 0
+                      ? 'No hay productos que coincidan con los filtros'
+                      : 'No se encontraron productos'
+                    : 'Busca productos para ver resultados'
+                }
+              </Text>
+            </View>
+          ) : null
+        }
             </Text>
           </View>
         }
@@ -820,20 +877,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     marginLeft: 8,
-  },
-  dataSaverActive: {
-    borderColor: '#28a745',
-    backgroundColor: '#f8fff8',
-  },
-  dataSaverText: {
-    color: '#28a745',
-  },
-  dbOnlyActive: {
-    borderColor: '#007bff',
-    backgroundColor: '#f0f8ff',
-  },
-  dbOnlyText: {
-    color: '#007bff',
   },
   searchButton: {
     backgroundColor: '#007AFF',
@@ -975,3 +1018,4 @@ const styles = StyleSheet.create({
 });
 
 export default SearchScreen;
+

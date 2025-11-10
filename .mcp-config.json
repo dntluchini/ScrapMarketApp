@@ -1,5 +1,12 @@
 {
   "mcp": {
+     "supabase": {
+      "type": "http",
+      "url": "https://mcp.supabase.com/mcp?project_ref=$fuyytpcqjxhoermrngkm",
+      "headers": {
+        "Authorization": "Bearer ${sbp_30c4af4365bcfdfe73788bb4707048cd64e97cb9}"
+      }
+    },
     "context7": {
       "enabled": true,
       "libraries": [
@@ -75,4 +82,5 @@
       }
     }
   }
-}
+  }
+

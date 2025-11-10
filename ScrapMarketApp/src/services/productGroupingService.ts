@@ -342,7 +342,8 @@ class ProductGroupingService {
         alternative_names: [product.canonname],
         display_name: product.canonname,
         has_stock: product.stock || false,
-        best_price: product
+        best_price: product,
+        imageUrl: product.imageUrl,
       });
     });
     
@@ -376,6 +377,10 @@ class ProductGroupingService {
     // Actualizar stock
     if (product.stock) {
       group.has_stock = true;
+    }
+
+    if (!group.imageUrl && product.imageUrl) {
+      group.imageUrl = product.imageUrl;
     }
     
     // Actualizar mejor precio
