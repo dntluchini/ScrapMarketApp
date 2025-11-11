@@ -13,7 +13,6 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { n8nMcpService } from '../services/n8nMcpService';
 import { historyService, ProductHistory } from '../services/historyService';
-import { alertService } from '../services/alertService';
 import { productGroupingService } from '../services/productGroupingService';
 
 interface ProductDetailsScreenProps {
@@ -33,8 +32,6 @@ export default function ProductDetailsScreen({ route, navigation }: ProductDetai
   const [history, setHistory] = useState<ProductHistory | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [showCreateAlert, setShowCreateAlert] = useState(false);
-  const [targetPrice, setTargetPrice] = useState('');
 
   useEffect(() => {
     loadProductDetails();
@@ -82,30 +79,6 @@ export default function ProductDetailsScreen({ route, navigation }: ProductDetai
     setIsRefreshing(true);
     await loadProductDetails();
     setIsRefreshing(false);
-  };
-
-  const handleCreateAlert = async () => {
-    if (!targetPrice || isNaN(Number(targetPrice))) {
-      Alert.alert('Error', 'Ingresa un precio válido');
-      return;
-    }
-
-    try {
-      await alertService.createAlert({
-        userId: 'current-user', // This would come from auth context
-        productName: productName,
-        canonname: productId,
-        targetPrice: Number(targetPrice),
-        isActive: true,
-      });
-
-      Alert.alert('Éxito', 'Alerta creada correctamente');
-      setShowCreateAlert(false);
-      setTargetPrice('');
-    } catch (error) {
-      console.error('Error creating alert:', error);
-      Alert.alert('Error', 'No se pudo crear la alerta');
-    }
   };
 
   const formatPrice = (price: number) => {
@@ -254,63 +227,6 @@ export default function ProductDetailsScreen({ route, navigation }: ProductDetai
         </View>
       )}
 
-      {/* Actions */}
-      <View style={styles.actions}>
-        <TouchableOpacity 
-          style={styles.actionButton}
-          onPress={() => setShowCreateAlert(true)}
-        >
-          <Ionicons name="notifications" size={20} color="#007AFF" />
-          <Text style={styles.actionButtonText}>Crear Alerta</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={styles.actionButton}
-          onPress={() => navigation.navigate('History', { productId })}
-        >
-          <Ionicons name="time" size={20} color="#007AFF" />
-          <Text style={styles.actionButtonText}>Ver Historial</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Create Alert Modal */}
-      {showCreateAlert && (
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Crear Alerta de Precio</Text>
-            <Text style={styles.modalSubtitle}>
-              Te notificaremos cuando el precio baje de:
-            </Text>
-            
-            <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>Precio objetivo (ARS)</Text>
-              <TextInput
-                style={styles.priceInput}
-                value={targetPrice}
-                onChangeText={setTargetPrice}
-                placeholder="0.00"
-                keyboardType="numeric"
-              />
-            </View>
-            
-            <View style={styles.modalActions}>
-              <TouchableOpacity 
-                style={styles.cancelButton}
-                onPress={() => setShowCreateAlert(false)}
-              >
-                <Text style={styles.cancelButtonText}>Cancelar</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={styles.confirmButton}
-                onPress={handleCreateAlert}
-              >
-                <Text style={styles.confirmButtonText}>Crear Alerta</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      )}
     </ScrollView>
   );
 }
@@ -472,102 +388,6 @@ const styles = StyleSheet.create({
     color: '#666',
     flex: 1,
     textAlign: 'right',
-  },
-  actions: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    padding: 20,
-    backgroundColor: '#fff',
-    marginTop: 8,
-  },
-  actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#007AFF',
-  },
-  actionButtonText: {
-    marginLeft: 8,
-    fontSize: 16,
-    color: '#007AFF',
-    fontWeight: '600',
-  },
-  modalOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContent: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 20,
-    width: '90%',
-    maxWidth: 400,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 8,
-  },
-  modalSubtitle: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 20,
-  },
-  inputContainer: {
-    marginBottom: 20,
-  },
-  inputLabel: {
-    fontSize: 14,
-    color: '#333',
-    marginBottom: 8,
-  },
-  priceInput: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    fontSize: 16,
-  },
-  modalActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  cancelButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    alignItems: 'center',
-    marginRight: 8,
-  },
-  cancelButtonText: {
-    fontSize: 16,
-    color: '#666',
-  },
-  confirmButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
-    backgroundColor: '#007AFF',
-    alignItems: 'center',
-    marginLeft: 8,
-  },
-  confirmButtonText: {
-    fontSize: 16,
-    color: '#fff',
-    fontWeight: 'bold',
   },
 });
 

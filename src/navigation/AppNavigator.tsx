@@ -8,23 +8,17 @@ import { Ionicons } from '@expo/vector-icons';
 import HomeScreen from '../screens/HomeScreen';
 import SearchScreen from '../screens/SearchScreen';
 import ProductDetailsScreen from '../screens/ProductDetailsScreen';
-import AlertsScreen from '../screens/AlertsScreen';
-import HistoryScreen from '../screens/HistoryScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 
 // Navigation types
 export type RootStackParamList = {
   MainTabs: undefined;
   ProductDetails: { productId: string; productName: string };
-  History: { productId: string; productName: string };
-  AlertDetails: { alertId: string };
 };
 
 export type MainTabParamList = {
   Home: undefined;
   Search: undefined;
-  Alerts: undefined;
-  History: undefined;
   Profile: undefined;
 };
 
@@ -43,10 +37,6 @@ function MainTabNavigator() {
             iconName = focused ? 'home' : 'home-outline';
           } else if (route.name === 'Search') {
             iconName = focused ? 'search' : 'search-outline';
-          } else if (route.name === 'Alerts') {
-            iconName = focused ? 'notifications' : 'notifications-outline';
-          } else if (route.name === 'History') {
-            iconName = focused ? 'time' : 'time-outline';
           } else if (route.name === 'Profile') {
             iconName = focused ? 'person' : 'person-outline';
           } else {
@@ -91,22 +81,6 @@ function MainTabNavigator() {
         }}
       />
       <Tab.Screen 
-        name="Alerts" 
-        component={AlertsScreen}
-        options={{ 
-          title: 'Alertas',
-          headerTitle: 'Mis Alertas'
-        }}
-      />
-      <Tab.Screen 
-        name="History" 
-        component={HistoryScreen}
-        options={{ 
-          title: 'Historial',
-          headerTitle: 'Historial de Precios'
-        }}
-      />
-      <Tab.Screen 
         name="Profile" 
         component={ProfileScreen}
         options={{ 
@@ -145,22 +119,6 @@ export default function AppNavigator() {
             title: route.params?.productName || 'Detalles del Producto',
             headerBackTitle: 'Atrás',
           })}
-        />
-        <Stack.Screen 
-          name="History" 
-          component={HistoryScreen}
-          options={({ route }) => ({
-            title: route.params?.productName || 'Historial de Precios',
-            headerBackTitle: 'Atrás',
-          })}
-        />
-        <Stack.Screen 
-          name="AlertDetails" 
-          component={AlertsScreen}
-          options={{
-            title: 'Detalles de Alerta',
-            headerBackTitle: 'Atrás',
-          }}
         />
       </Stack.Navigator>
     </NavigationContainer>
