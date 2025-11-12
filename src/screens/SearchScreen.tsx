@@ -124,7 +124,17 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route }) => {
 
   React.useEffect(() => {
     if (route?.params?.initialQuery) {
-      setSearchQuery(route.params.initialQuery);
+      const query = route.params.initialQuery;
+      setSearchQuery(query);
+      // Ejecutar búsqueda automáticamente cuando hay initialQuery
+      if (query && query.trim().length >= 2) {
+        // Usar setTimeout para asegurar que el estado se actualice antes de buscar
+        const timeoutId = setTimeout(() => {
+          // Ejecutar búsqueda directamente con el query
+          executeSearchWithQuery(query);
+        }, 200);
+        return () => clearTimeout(timeoutId);
+      }
     }
   }, [route?.params?.initialQuery]);
 
@@ -269,14 +279,27 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route }) => {
       return;
     }
     
+    // Llamar a la función interna con el query del estado
+    await executeSearchWithQuery(searchQuery);
+  };
+
+  // Función interna para ejecutar búsqueda con un query específico
+  const executeSearchWithQuery = async (queryToSearch: string) => {
+    console.log('🔍 SearchScreen executeSearchWithQuery called with query:', queryToSearch);
+    
+    // Validar que el query no esté vacío y tenga al menos 2 caracteres
+    if (!queryToSearch.trim() || queryToSearch.trim().length < 2) {
+      console.log('⚠️ Query muy corto o vacío, no iniciando búsqueda');
+      return;
+    }
+    
     // Prevenir múltiples búsquedas simultáneas
     if (isSearching || isScraping || isPolling) {
       console.log('🔍 Search already in progress, ignoring request');
       return;
     }
     
-    // Validación adicional: solo permitir búsquedas manuales
-    console.log('✅ User-initiated search approved, proceeding...');
+    console.log('✅ Auto-search approved, proceeding...');
     
     setIsSearching(true);
     setIsLoading(true);
@@ -291,10 +314,69 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route }) => {
     setScrapedProducts([]);
     
     try {
+      // Primero intentar búsqueda en BD usando search-in-db
+      console.log('🔍 Trying search-in-db endpoint first');
+      try {
+        const dbResponse = await n8nMcpService.searchProductsInDatabaseOnly(queryToSearch);
+        console.log('✅ search-in-db response type:', typeof dbResponse);
+        console.log('✅ search-in-db response:', JSON.stringify(dbResponse, null, 2).substring(0, 500));
+        
+        // Extraer el array de productos de la respuesta
+        let productsData: any = null;
+        
+        // Caso 1: Respuesta dentro de un array con un objeto json (n8n webhook response format)
+        if (Array.isArray(dbResponse) && dbResponse.length > 0 && dbResponse[0] && dbResponse[0].json) {
+          const jsonData = dbResponse[0].json;
+          if (jsonData.status === 'found' && Array.isArray(jsonData.data)) {
+            productsData = jsonData.data;
+            console.log('✅ Found products in database via search-in-db (format 1 - array with json):', productsData.length);
+          }
+        }
+        // Caso 2: Respuesta directa con estructura { status, data, ... }
+        else if (dbResponse && typeof dbResponse === 'object' && dbResponse.status === 'found' && Array.isArray(dbResponse.data)) {
+          productsData = dbResponse.data;
+          console.log('✅ Found products in database via search-in-db (format 2 - direct object):', productsData.length);
+        }
+        // Caso 3: Respuesta es directamente un array de productos
+        else if (Array.isArray(dbResponse) && dbResponse.length > 0) {
+          // Verificar si es un array de objetos con estructura { status, data, ... }
+          if (dbResponse[0] && typeof dbResponse[0] === 'object' && dbResponse[0].status === 'found' && Array.isArray(dbResponse[0].data)) {
+            productsData = dbResponse[0].data;
+            console.log('✅ Found products in database via search-in-db (format 3a - array with status/data):', productsData.length);
+          } else {
+            // Array directo de productos (ya agrupados)
+            productsData = dbResponse;
+            console.log('✅ Found products in database via search-in-db (format 3b - direct array):', productsData.length);
+          }
+        }
+        // Caso 4: Respuesta dentro de un objeto json (n8n puede envolver la respuesta)
+        else if (dbResponse && typeof dbResponse === 'object' && dbResponse.json && dbResponse.json.status === 'found' && Array.isArray(dbResponse.json.data)) {
+          productsData = dbResponse.json.data;
+          console.log('✅ Found products in database via search-in-db (format 4 - nested json):', productsData.length);
+        }
+        
+        if (productsData && Array.isArray(productsData) && productsData.length > 0) {
+          console.log('✅ Processing', productsData.length, 'products from search-in-db with query:', queryToSearch);
+          // Asegurar que searchQuery esté actualizado antes de procesar
+          setSearchQuery(queryToSearch);
+          // Pasar fromDatabase=true para desactivar el filtro de relevancia
+          await processSearchResults(productsData, false, true);
+          return; // Salir temprano si encontramos resultados
+        } else if (dbResponse && typeof dbResponse === 'object' && dbResponse.status === 'not_found') {
+          console.log('⚠️ No products found in database via search-in-db');
+          // Continuar con el flujo normal de scraping
+        } else {
+          console.log('⚠️ Unexpected response format from search-in-db, falling back to normal search');
+        }
+      } catch (dbError) {
+        console.warn('⚠️ search-in-db failed, falling back to normal search:', dbError);
+        // Continuar con el flujo normal
+      }
+      
       console.log('🔍 Using new realtime scraping flow');
       
-      // Primero intentar búsqueda normal
-      const initialResponse = await searchService.searchProductsWithRealtimeScraping(searchQuery, dataSaverMode, dbOnlyMode);
+      // Si search-in-db no funcionó o no encontró resultados, usar el flujo normal
+      const initialResponse = await searchService.searchProductsWithRealtimeScraping(queryToSearch, dataSaverMode, dbOnlyMode);
       console.log('🔍 Initial response from searchService:', initialResponse);
       console.log('🔍 Initial response.data type:', typeof initialResponse.data);
       console.log('🔍 Initial response.data isArray:', Array.isArray(initialResponse.data));
@@ -353,7 +435,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route }) => {
         // Usar polling para mostrar resultados en tiempo real con PROGRESSIVE LOADING
         setIsPolling(true);
         const finalResponse = await searchService.pollScrapingResults(
-          searchQuery,
+          queryToSearch,
           async (partialResults) => {
             // ⚡ PROGRESSIVE LOADING: Mostrar primeros resultados inmediatamente
             console.log('⚡ Progressive loading: mostrando productos parciales:', partialResults.length);
@@ -425,8 +507,8 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route }) => {
   };
 
   // Función auxiliar para procesar resultados de búsqueda
-  const processSearchResults = async (productsArray: any[], isScraped: boolean) => {
-    console.log('🔍 Processing search results:', productsArray.length, 'isScraped:', isScraped);
+  const processSearchResults = async (productsArray: any[], isScraped: boolean, fromDatabase: boolean = false) => {
+    console.log('🔍 Processing search results:', productsArray.length, 'isScraped:', isScraped, 'fromDatabase:', fromDatabase);
     
     let groupedProducts: GroupedProduct[] = [];
     
@@ -449,7 +531,99 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route }) => {
           const groupImage = resolveImageUrl(item);
           const mappedProducts: Product[] = item.supermarkets.map((supermarket: any) => {
             const productImage = resolveImageUrl(supermarket) || groupImage;
-            return {
+            
+            // Log completo del objeto supermarket para debugging
+            console.log('🔍 Supermarket object:', {
+              super: supermarket.super,
+              precio: supermarket.precio,
+              hasAddToCartLink: !!(supermarket.addToCartLink || supermarket.add_to_cart_link),
+              addToCartLink: supermarket.addToCartLink || supermarket.add_to_cart_link,
+              hasSellers: !!(supermarket.sellers && Array.isArray(supermarket.sellers)),
+              sellersCount: supermarket.sellers?.length || 0,
+              fullSupermarket: JSON.stringify(supermarket, null, 2) // Log completo como string para ver toda la estructura
+            });
+            
+            // Extraer addToCartLink desde múltiples posibles ubicaciones y formatos
+            let addToCartLink: string | undefined = undefined;
+            
+            // Buscar en todas las posibles variaciones del nombre del campo
+            const possibleFieldNames = [
+              'addToCartLink',
+              'add_to_cart_link',
+              'addToCart',
+              'add_to_cart',
+              'cartLink',
+              'cart_link',
+              'addCartLink',
+              'add_cart_link'
+            ];
+            
+            // Primero verificar en el nivel de supermarket directamente (formato desde SQL/reg_prices)
+            for (const fieldName of possibleFieldNames) {
+              if (supermarket[fieldName] && typeof supermarket[fieldName] === 'string' && supermarket[fieldName].trim() !== '') {
+                addToCartLink = supermarket[fieldName];
+                console.log(`🔍 Found addToCartLink in supermarket level (as ${fieldName}):`, addToCartLink);
+                break;
+              }
+            }
+            
+            // Si no está en el nivel de supermarket, buscar en sellers
+            if (!addToCartLink && supermarket.sellers && Array.isArray(supermarket.sellers) && supermarket.sellers.length > 0) {
+              for (const seller of supermarket.sellers) {
+                for (const fieldName of possibleFieldNames) {
+                  if (seller[fieldName] && typeof seller[fieldName] === 'string' && seller[fieldName].trim() !== '') {
+                    addToCartLink = seller[fieldName];
+                    console.log(`🔍 Found addToCartLink in seller (as ${fieldName}):`, addToCartLink);
+                    break;
+                  }
+                }
+                if (addToCartLink) break;
+              }
+            }
+            
+            // También buscar en sellerName si está disponible (puede tener el link en el nombre)
+            if (!addToCartLink && supermarket.sellerName) {
+              console.log('🔍 sellerName found but no addToCartLink:', supermarket.sellerName);
+            }
+            
+            if (!addToCartLink) {
+              console.log('⚠️ No addToCartLink found for supermarket:', supermarket.super);
+              console.log('⚠️ Available keys in supermarket:', Object.keys(supermarket));
+              console.log('⚠️ Full supermarket object:', JSON.stringify(supermarket, null, 2));
+            } else {
+              console.log('✅ addToCartLink successfully extracted for', supermarket.super, ':', addToCartLink);
+            }
+            
+            // Si no se encontró addToCartLink, intentar construirlo desde la URL
+            if (!addToCartLink && supermarket.url) {
+              const url = supermarket.url;
+              // Intentar construir el link de agregar al carrito basándose en el dominio
+              if (url.includes('vea.com.ar')) {
+                // Extraer SKU de la URL si es posible
+                const skuMatch = url.match(/sku=(\d+)/);
+                if (skuMatch) {
+                  const price = Math.round(parseFloat(supermarket.precio || 0) * 100);
+                  addToCartLink = `https://www.vea.com.ar/checkout/cart/add?sku=${skuMatch[1]}&qty=1&seller=1&sc=34&price=${price}&cv=_&sc=34`;
+                  console.log('🔧 Constructed addToCartLink for Vea from URL:', addToCartLink);
+                }
+              } else if (url.includes('jumbo.com.ar')) {
+                const skuMatch = url.match(/sku=(\d+)/);
+                if (skuMatch) {
+                  const price = Math.round(parseFloat(supermarket.precio || 0) * 100);
+                  addToCartLink = `https://www.jumbo.com.ar/checkout/cart/add?sku=${skuMatch[1]}&qty=1&seller=1&sc=32&price=${price}&cv=_&sc=32`;
+                  console.log('🔧 Constructed addToCartLink for Jumbo from URL:', addToCartLink);
+                }
+              } else if (url.includes('disco.com.ar')) {
+                const skuMatch = url.match(/sku=(\d+)/);
+                if (skuMatch) {
+                  const price = Math.round(parseFloat(supermarket.precio || 0) * 100);
+                  addToCartLink = `https://www.disco.com.ar/checkout/cart/add?sku=${skuMatch[1]}&qty=1&seller=1&sc=33&price=${price}&cv=_&sc=33`;
+                  console.log('🔧 Constructed addToCartLink for Disco from URL:', addToCartLink);
+                }
+              }
+            }
+            
+            const mappedProduct: Product = {
               canonid: item.canonid || '',
               canonname: item.canonname || '',
               brand: item.brand || undefined,
@@ -466,7 +640,26 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route }) => {
               site: '',
               relevance: 0,
               imageUrl: productImage,
+              addToCartLink: addToCartLink || undefined, // Asegurar que se asigne correctamente
             };
+            
+            // Log para verificar que addToCartLink se mapeó correctamente
+            console.log('🔍 Mapped product for', supermarket.super, ':', {
+              canonname: mappedProduct.canonname,
+              supermercado: mappedProduct.supermercado,
+              hasAddToCartLink: !!mappedProduct.addToCartLink,
+              addToCartLink: mappedProduct.addToCartLink,
+              url: mappedProduct.url
+            });
+            
+            // Verificación final: asegurar que addToCartLink esté en el objeto
+            if (!mappedProduct.addToCartLink) {
+              console.error('❌ ERROR: addToCartLink is still undefined after mapping for', supermarket.super);
+              console.error('❌ Supermarket object keys:', Object.keys(supermarket));
+              console.error('❌ Supermarket object:', JSON.stringify(supermarket, null, 2));
+            }
+            
+            return mappedProduct;
           });
 
           const bestPrice =
@@ -496,20 +689,32 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route }) => {
         console.log('🔍 Converted to', groupedProducts.length, 'GroupedProducts');
         
         // Aplicar filtrado de relevancia a productos ya agrupados de BD
-        if (searchQuery && searchQuery.trim().length >= 2) {
-          const filteredGroups = groupedProducts.filter(group => {
-            const relevance = productGroupingService.calculateGroupRelevance(group, searchQuery);
-            const isRelevant = relevance >= 25; // Mismo umbral que en filterRelevantProducts
+        // NOTA: Si los productos vienen directamente de search-in-db, NO aplicar filtro de relevancia
+        // ya que fueron buscados específicamente y deben mostrarse todos
+        if (!fromDatabase) {
+          const currentQuery = searchQuery.trim();
+          if (currentQuery && currentQuery.length >= 2) {
+            const filteredGroups = groupedProducts.filter(group => {
+              const relevance = productGroupingService.calculateGroupRelevance(group, currentQuery);
+              // Umbral estándar para productos scrapeados
+              const isRelevant = relevance >= 25;
+              
+              if (!isRelevant) {
+                console.log(`❌ Filtered out group: "${group.display_name}" (relevance: ${relevance.toFixed(1)}, query: "${currentQuery}")`);
+              } else {
+                console.log(`✅ Kept group: "${group.display_name}" (relevance: ${relevance.toFixed(1)})`);
+              }
+              
+              return isRelevant;
+            });
             
-            if (!isRelevant) {
-              console.log(`❌ Filtered out group: "${group.display_name}" (relevance: ${relevance.toFixed(1)})`);
-            }
-            
-            return isRelevant;
-          });
-          
-          console.log(`🔍 Filtered grouped products from ${groupedProducts.length} to ${filteredGroups.length}`);
-          groupedProducts = filteredGroups;
+            console.log(`🔍 Filtered grouped products from ${groupedProducts.length} to ${filteredGroups.length}`);
+            groupedProducts = filteredGroups;
+          } else {
+            console.log('⚠️ No search query available for relevance filtering, showing all products');
+          }
+        } else {
+          console.log('✅ Products from database search, skipping relevance filter - showing all', groupedProducts.length, 'products');
         }
         
         // Set individual products for compatibility
@@ -524,9 +729,97 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route }) => {
         
         // Convert to Product interface (individual products)
         const products: Product[] = productsArray.map((item: any, index: number) => {
-          console.log('🔍 Mapping product item:', item);
+          console.log('🔍 Mapping individual product item:', {
+            canonname: item.canonname || item.name,
+            supermercado: item.supermercado || item.super_name,
+            hasSellers: !!(item.sellers && Array.isArray(item.sellers)),
+            sellersCount: item.sellers?.length || 0,
+            hasAddToCartLink: !!(item.addToCartLink || item.add_to_cart_link),
+            url: item.url || item.product_url,
+            fullItem: JSON.stringify(item, null, 2)
+          });
           
-          return {
+          // Extraer addToCartLink desde múltiples posibles ubicaciones y formatos
+          let addToCartLink: string | undefined = undefined;
+          
+          // Buscar en todas las posibles variaciones del nombre del campo
+          const possibleFieldNames = [
+            'addToCartLink',
+            'add_to_cart_link',
+            'addToCart',
+            'add_to_cart',
+            'cartLink',
+            'cart_link',
+            'addCartLink',
+            'add_cart_link'
+          ];
+          
+          // Primero verificar en el nivel del item directamente
+          for (const fieldName of possibleFieldNames) {
+            if (item[fieldName] && typeof item[fieldName] === 'string' && item[fieldName].trim() !== '') {
+              addToCartLink = item[fieldName];
+              console.log(`🔍 Found addToCartLink in item level (as ${fieldName}):`, addToCartLink);
+              break;
+            }
+          }
+          
+          // Si no está en el nivel del item, buscar en sellers
+          if (!addToCartLink && item.sellers && Array.isArray(item.sellers) && item.sellers.length > 0) {
+            for (const seller of item.sellers) {
+              for (const fieldName of possibleFieldNames) {
+                if (seller[fieldName] && typeof seller[fieldName] === 'string' && seller[fieldName].trim() !== '') {
+                  addToCartLink = seller[fieldName];
+                  console.log(`🔍 Found addToCartLink in seller (as ${fieldName}):`, addToCartLink);
+                  break;
+                }
+              }
+              if (addToCartLink) break;
+            }
+          }
+          
+          // Si no se encontró addToCartLink, intentar construirlo desde la URL
+          if (!addToCartLink && (item.url || item.product_url)) {
+            const url = item.url || item.product_url;
+            if (url.includes('vea.com.ar')) {
+              const skuMatch = url.match(/sku=(\d+)/) || url.match(/\/(\d+)\//);
+              if (skuMatch) {
+                const price = Math.round(parseFloat(item.precio || item.price || 0) * 100);
+                addToCartLink = `https://www.vea.com.ar/checkout/cart/add?sku=${skuMatch[1]}&qty=1&seller=1&sc=34&price=${price}&cv=_&sc=34`;
+                console.log('🔧 Constructed addToCartLink for Vea from URL:', addToCartLink);
+              }
+            } else if (url.includes('jumbo.com.ar')) {
+              const skuMatch = url.match(/sku=(\d+)/) || url.match(/\/(\d+)\//);
+              if (skuMatch) {
+                const price = Math.round(parseFloat(item.precio || item.price || 0) * 100);
+                addToCartLink = `https://www.jumbo.com.ar/checkout/cart/add?sku=${skuMatch[1]}&qty=1&seller=1&sc=32&price=${price}&cv=_&sc=32`;
+                console.log('🔧 Constructed addToCartLink for Jumbo from URL:', addToCartLink);
+              }
+            } else if (url.includes('disco.com.ar')) {
+              const skuMatch = url.match(/sku=(\d+)/) || url.match(/\/(\d+)\//);
+              if (skuMatch) {
+                const price = Math.round(parseFloat(item.precio || item.price || 0) * 100);
+                addToCartLink = `https://www.disco.com.ar/checkout/cart/add?sku=${skuMatch[1]}&qty=1&seller=1&sc=33&price=${price}&cv=_&sc=33`;
+                console.log('🔧 Constructed addToCartLink for Disco from URL:', addToCartLink);
+              }
+            } else if (url.includes('carrefour.com.ar')) {
+              const skuMatch = url.match(/sku=(\d+)/) || url.match(/\/(\d+)\//);
+              if (skuMatch) {
+                const price = Math.round(parseFloat(item.precio || item.price || 0) * 100);
+                addToCartLink = `https://www.carrefour.com.ar/checkout/cart/add?sku=${skuMatch[1]}&qty=1&seller=1&sc=35&price=${price}&cv=_&sc=35`;
+                console.log('🔧 Constructed addToCartLink for Carrefour from URL:', addToCartLink);
+              }
+            }
+          }
+          
+          if (!addToCartLink) {
+            console.log('⚠️ No addToCartLink found for individual product:', item.canonname || item.name);
+            console.log('⚠️ Available keys in item:', Object.keys(item));
+            console.log('⚠️ Full item object:', JSON.stringify(item, null, 2));
+          } else {
+            console.log('✅ addToCartLink successfully extracted for individual product:', addToCartLink);
+          }
+          
+          const mappedProduct: Product = {
             canonid: item.canonid || item.id || `scraped_${index}`,
             canonname: item.canonname || item.name || item.product_name || '',
             brand: item.brand || undefined,
@@ -543,7 +836,25 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route }) => {
             site: item.site || '',
             relevance: item.relevance || 0,
             imageUrl: resolveImageUrl(item),
+            addToCartLink: addToCartLink || undefined, // Asegurar que se asigne correctamente
           };
+          
+          // Log para verificar que addToCartLink se mapeó correctamente
+          console.log('🔍 Mapped individual product:', {
+            canonname: mappedProduct.canonname,
+            supermercado: mappedProduct.supermercado,
+            hasAddToCartLink: !!mappedProduct.addToCartLink,
+            addToCartLink: mappedProduct.addToCartLink,
+            url: mappedProduct.url
+          });
+          
+          // Verificación final
+          if (!mappedProduct.addToCartLink) {
+            console.error('❌ ERROR: addToCartLink is still undefined after mapping for individual product:', mappedProduct.canonname);
+            console.error('❌ Item keys:', Object.keys(item));
+          }
+          
+          return mappedProduct;
         });
         
         console.log('🔍 Converted products:', products.length);

@@ -15,6 +15,7 @@ export interface Product {
   storeBase?: string;
   site?: string;
   relevance?: number;
+  addToCartLink?: string; // ← URL para agregar producto al carrito del supermercado
 }
 
 export interface GroupedProduct {

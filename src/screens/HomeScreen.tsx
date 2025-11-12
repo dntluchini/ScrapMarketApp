@@ -9,7 +9,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import PopularProducts from '../components/PopularProducts';
 
 interface HomeScreenProps {
@@ -17,20 +17,22 @@ interface HomeScreenProps {
 }
 
 type QuickSearchItem = {
-  icon: keyof typeof Ionicons.glyphMap;
+  icon: string;
   label: string;
   query: string;
+  color: string;
+  iconSet?: 'ion' | 'mci';
 };
 
 const QUICK_SEARCH_ENDPOINT = 'http://192.168.1.99:5678/webhook/quick_search';
 
 const QUICK_SEARCH_ITEMS: QuickSearchItem[] = [
-  { icon: 'water-outline', label: 'Agua', query: 'agua' },
-  { icon: 'nutrition-outline', label: 'Vegetales', query: 'vegetales' },
-  { icon: 'fast-food-outline', label: 'Carnes', query: 'carnes' },
-  { icon: 'wine-outline', label: 'Bebidas', query: 'bebidas' },
-  { icon: 'ice-cream-outline', label: 'L\u00E1cteos', query: 'l\u00E1cteos' },
-  { icon: 'pizza-outline', label: 'Panader\u00EDa', query: 'panader\u00EDa' },
+  { icon: 'water-outline', label: 'Agua', query: 'agua', color: '#0ea5e9', iconSet: 'ion' },
+  { icon: 'leaf-outline', label: 'Vegetales', query: 'vegetales', color: '#22c55e', iconSet: 'ion' },
+  { icon: 'food-steak', label: 'Carnes', query: 'carnes', color: '#ef4444', iconSet: 'mci' },
+  { icon: 'wine-outline', label: 'Bebidas', query: 'bebidas', color: '#f97316', iconSet: 'ion' },
+  { icon: 'cow', label: 'L\u00E1cteos', query: 'l\u00E1cteos', color: '#8b5cf6', iconSet: 'mci' },
+  { icon: 'baguette', label: 'Panader\u00EDa', query: 'panader\u00EDa', color: '#facc15', iconSet: 'mci' },
 ];
 
 const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
@@ -134,9 +136,13 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     >
       <View style={styles.quickSearchIcon}>
         {quickSearchLoading === item.query ? (
-          <ActivityIndicator size="small" color="#007AFF" />
+          <ActivityIndicator size="small" color={item.color} />
         ) : (
-          <Ionicons name={item.icon} size={24} color="#007AFF" />
+          item.iconSet === 'mci' ? (
+            <MaterialCommunityIcons name={item.icon as any} size={24} color={item.color} />
+          ) : (
+            <Ionicons name={item.icon as keyof typeof Ionicons.glyphMap} size={24} color={item.color} />
+          )
         )}
       </View>
       <Text style={styles.quickSearchLabel}>{item.label}</Text>

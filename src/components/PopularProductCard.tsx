@@ -34,8 +34,22 @@ const getImageSource = (product: GroupedProduct): string | undefined => {
     product.imageUrl,
     product.best_price?.imageUrl,
     product.products.find((item: Product) => !!item.imageUrl)?.imageUrl,
+    // Fallback: buscar en cualquier producto del array
+    ...product.products.map(item => item.imageUrl).filter(Boolean),
   ];
-  return sources.find(Boolean);
+  const found = sources.find(Boolean);
+  
+  // Debug: Log image search for first product
+  if (!found && product.display_name) {
+    console.log('⚠️ [PopularProductCard] No image found for:', {
+      display_name: product.display_name,
+      productImageUrl: product.imageUrl,
+      bestPriceImageUrl: product.best_price?.imageUrl,
+      productsWithImages: product.products.filter(p => p.imageUrl).map(p => ({ supermercado: p.supermercado, imageUrl: p.imageUrl })),
+    });
+  }
+  
+  return found;
 };
 
 const capitalizeWords = (text: string): string =>
@@ -43,6 +57,33 @@ const capitalizeWords = (text: string): string =>
     .split(' ')
     .map(word => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ');
+
+// Función para capitalizar marcas correctamente
+// Maneja artículos y preposiciones (LA, DE, LOS, etc.)
+const capitalizeBrand = (brand: string): string => {
+  if (!brand) return '';
+  
+  // Palabras que deben permanecer en minúsculas (excepto si son la primera palabra)
+  const lowercaseWords = ['de', 'del', 'la', 'las', 'el', 'los', 'y', 'e', 'o', 'u', 'en', 'con', 'por', 'para'];
+  
+  const words = brand.toLowerCase().trim().split(/\s+/);
+  if (words.length === 0) return '';
+  
+  return words
+    .map((word, index) => {
+      // Si es la primera palabra, siempre capitalizar
+      if (index === 0) {
+        return word.charAt(0).toUpperCase() + word.slice(1);
+      }
+      // Si es una palabra que debe estar en minúsculas, mantenerla así
+      if (lowercaseWords.includes(word)) {
+        return word;
+      }
+      // Para el resto, capitalizar
+      return word.charAt(0).toUpperCase() + word.slice(1);
+    })
+    .join(' ');
+};
 
 export const PopularProductCard: React.FC<PopularProductCardProps> = ({ product, onPress, onAdd }) => {
   const weight = useMemo(() => normalizeWeight(product.exact_weight), [product.exact_weight]);
@@ -71,7 +112,11 @@ export const PopularProductCard: React.FC<PopularProductCardProps> = ({ product,
   };
 
   return (
-    <TouchableOpacity style={styles.card} activeOpacity={0.85} onPress={handlePress}>
+    <TouchableOpacity 
+      style={styles.card} 
+      onPress={handlePress}
+      activeOpacity={0.85}
+    >
       <View style={styles.imageWrapper}>
         {mainImage ? (
           <Image source={{ uri: mainImage }} style={styles.image} resizeMode="contain" />
@@ -88,7 +133,7 @@ export const PopularProductCard: React.FC<PopularProductCardProps> = ({ product,
       <View style={styles.badgesRow}>
         {product.brand ? (
           <View style={styles.badge}>
-            <Text style={styles.badgeText} numberOfLines={1}>{product.brand}</Text>
+            <Text style={styles.badgeText} numberOfLines={1}>{capitalizeBrand(product.brand)}</Text>
           </View>
         ) : null}
         {weight ? (

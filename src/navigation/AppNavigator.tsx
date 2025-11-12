@@ -9,6 +9,9 @@ import HomeScreen from '../screens/HomeScreen';
 import SearchScreen from '../screens/SearchScreen';
 import ProductDetailsScreen from '../screens/ProductDetailsScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+import CartScreen from '../screens/CartScreen';
+import { useCart } from '../hooks/useCart';
+import { AnimatedCartBadge } from '../components/AnimatedCartBadge';
 
 // Navigation types
 export type RootStackParamList = {
@@ -19,14 +22,22 @@ export type RootStackParamList = {
 export type MainTabParamList = {
   Home: undefined;
   Search: undefined;
+  Cart: undefined;
   Profile: undefined;
 };
 
 const Stack = createStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
+// Componente wrapper para CartScreen (ya no necesita actualizar badge, se hace en el icon)
+function CartScreenWithBadge(props: any) {
+  return <CartScreen {...props} />;
+}
+
 // Main Tab Navigator
 function MainTabNavigator() {
+  const { totalItems } = useCart();
+  
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -37,6 +48,8 @@ function MainTabNavigator() {
             iconName = focused ? 'home' : 'home-outline';
           } else if (route.name === 'Search') {
             iconName = focused ? 'search' : 'search-outline';
+          } else if (route.name === 'Cart') {
+            iconName = focused ? 'cart' : 'cart-outline';
           } else if (route.name === 'Profile') {
             iconName = focused ? 'person' : 'person-outline';
           } else {
@@ -78,6 +91,27 @@ function MainTabNavigator() {
         options={{ 
           title: 'Buscar',
           headerTitle: 'Buscar Productos'
+        }}
+      />
+      <Tab.Screen 
+        name="Cart" 
+        component={CartScreenWithBadge}
+        options={({ route }) => {
+          // Usar una función para que se ejecute cada vez que se renderiza
+          return {
+            title: 'Carrito',
+            headerTitle: 'Mi Carrito',
+            tabBarIcon: ({ focused, color, size }) => {
+              const icon = (
+                <Ionicons 
+                  name={focused ? 'cart' : 'cart-outline'} 
+                  size={size} 
+                  color={color} 
+                />
+              );
+              return <AnimatedCartBadge count={totalItems}>{icon}</AnimatedCartBadge>;
+            },
+          };
         }}
       />
       <Tab.Screen 

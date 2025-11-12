@@ -1,5 +1,6 @@
 ﻿import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Animated, Modal, ScrollView, Linking, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Animated, Modal, ScrollView, Linking, Alert, AppState } from 'react-native';
+import { useIsFocused } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { GroupedProduct, Product, productGroupingService } from '../services/productGroupingService';
 import PopularProductCard from './PopularProductCard';
@@ -27,13 +28,16 @@ const normalizeSupermarket = (
 ): Product | null => {
   if (!raw || typeof raw !== 'object') return null;
 
-  const price = Number(raw.precio ?? raw.price ?? raw.min_price ?? raw.max_price ?? raw.best_price);
-  if (Number.isNaN(price)) return null;
+  // Convertir precio de string a número si es necesario
+  const priceRaw = raw.precio ?? raw.price ?? raw.min_price ?? raw.max_price ?? raw.best_price;
+  const price = typeof priceRaw === 'string' ? parseFloat(priceRaw) : Number(priceRaw);
+  if (Number.isNaN(price) || price <= 0) return null;
 
   const supermarketName = raw.supermercado ?? raw.super ?? raw.store ?? raw.market ?? raw.name;
   if (!supermarketName) return null;
 
-  const resolvedImage = raw.imageUrl ?? raw.imgUrl ?? raw.image_url ?? raw.imageurl ?? raw.image ?? fallback.imageUrl;
+  // Buscar imagen en múltiples formatos (incluyendo imageurl en minúsculas)
+  const resolvedImage = raw.imageUrl ?? raw.imageurl ?? raw.imgUrl ?? raw.image_url ?? raw.image ?? fallback.imageUrl;
 
   return {
     canonid: String(raw.canonid ?? fallback.canonid),
@@ -52,6 +56,7 @@ const normalizeSupermarket = (
     storeBase: raw.storeBase,
     site: raw.site,
     relevance: raw.relevance,
+    addToCartLink: raw.addToCartLink ?? raw.add_to_cart_link ?? raw.addToCart ?? undefined,
   };
 };
 
@@ -59,7 +64,14 @@ const collectProductEntries = (node: any, context: { meta?: any; query?: string 
   if (!node) return [];
 
   if (Array.isArray(node)) {
-    return node.flatMap(item => collectProductEntries(item, context));
+    return node.flatMap(item => {
+      if (!item || typeof item !== 'object') return [];
+      // Si el item tiene estructura de producto (canonid, canonname, supermarkets), retornarlo directamente
+      if (item.canonid || item.canonname || Array.isArray(item.supermarkets)) {
+        return [{ product: item, context }];
+      }
+      return collectProductEntries(item, context);
+    });
   }
 
   if (Array.isArray(node.items)) {
@@ -100,7 +112,7 @@ const normalizePopularProducts = (payload: any): GroupedProduct[] => {
   const entries = collectProductEntries(payload);
 
   return entries
-    .map(({ product, context }) => {
+    .map(({ product, context }, index) => {
       if (!product || typeof product !== 'object') return null;
 
       const meta = { ...(context.meta || {}), ...(product.meta || {}) };
@@ -111,15 +123,16 @@ const normalizePopularProducts = (payload: any): GroupedProduct[] => {
       const ean = String(product.ean ?? meta.ean ?? canonid);
       const exactWeight = String(product.exact_weight ?? meta.exact_weight ?? '');
 
+      // Buscar imagen en múltiples ubicaciones (incluyendo imageurl en minúsculas)
       const imageCandidates = [
         product.imageUrl,
+        product.imageurl,  // ← Agregado para el nuevo formato
         product.imgUrl,
-        product.imageurl,
         product.image_url,
         product.image,
         meta.imageUrl,
+        meta.imageurl,  // ← Agregado para el nuevo formato
         meta.imgUrl,
-        meta.imageurl,
         meta.image_url,
         meta.image,
       ];
@@ -128,8 +141,9 @@ const normalizePopularProducts = (payload: any): GroupedProduct[] => {
 
       const rawSupermarkets = Array.isArray(product.supermarkets) ? product.supermarkets : [];
       const mappedProducts = rawSupermarkets
-        .map(raw =>
-          normalizeSupermarket(raw, {
+        .map(raw => {
+          // Normalizar el objeto supermarket y agregar addToCartLink si está disponible
+          const normalized = normalizeSupermarket(raw, {
             canonid,
             canonname: displayName,
             ean,
@@ -137,15 +151,26 @@ const normalizePopularProducts = (payload: any): GroupedProduct[] => {
             brand: product.brand ?? meta.brand,
             brandId: product.brandId ?? meta.brandId,
             imageUrl: productImage,
-          }),
-        )
+          });
+          
+          // Agregar addToCartLink desde el objeto supermarket si existe
+          if (normalized && raw.addToCartLink) {
+            normalized.addToCartLink = raw.addToCartLink;
+          }
+          
+          return normalized;
+        })
         .filter(Boolean) as Product[];
 
       if (mappedProducts.length === 0) return null;
 
       const prices = mappedProducts.map(item => item.precio);
-      const minPrice = Number(product.min_price ?? meta.min_price ?? Math.min(...prices));
-      const maxPrice = Number(product.max_price ?? meta.max_price ?? Math.max(...prices));
+      
+      // Convertir precios de string a número si es necesario
+      const minPriceRaw = product.min_price ?? meta.min_price ?? Math.min(...prices);
+      const maxPriceRaw = product.max_price ?? meta.max_price ?? Math.max(...prices);
+      const minPrice = typeof minPriceRaw === 'string' ? parseFloat(minPriceRaw) : Number(minPriceRaw);
+      const maxPrice = typeof maxPriceRaw === 'string' ? parseFloat(maxPriceRaw) : Number(maxPriceRaw);
 
       const bestPriceCandidate =
         product.best_price && typeof product.best_price === 'object'
@@ -169,6 +194,11 @@ const normalizePopularProducts = (payload: any): GroupedProduct[] => {
         .map(String)
         .filter(Boolean);
 
+      // Calcular total_supermarkets desde el array supermarkets (más confiable)
+      const totalSupermarkets = mappedProducts.length > 0 
+        ? mappedProducts.length 
+        : Number(product.total_supermarkets ?? 0);
+
       return {
         ean,
         exact_weight: exactWeight,
@@ -177,7 +207,7 @@ const normalizePopularProducts = (payload: any): GroupedProduct[] => {
         products: mappedProducts,
         min_price: minPrice,
         max_price: maxPrice,
-        total_supermarkets: Number(product.total_supermarkets ?? mappedProducts.length),
+        total_supermarkets: totalSupermarkets,
         alternative_names: Array.from(new Set(alternativeNames)),
         display_name: String(displayName),
         has_stock: mappedProducts.some(item => item.stock),
@@ -198,6 +228,7 @@ const PopularProducts: React.FC<PopularProductsProps> = ({ onProductSelect }) =>
   const animationFrameRef = useRef<number | null>(null);
   const autoScrollOffsetRef = useRef(0);
   const [selectedProduct, setSelectedProduct] = useState<GroupedProduct | null>(null);
+  const isFocused = useIsFocused();
 
   const loadPopularProducts = useCallback(async () => {
     setIsLoading(true);
@@ -205,25 +236,58 @@ const PopularProducts: React.FC<PopularProductsProps> = ({ onProductSelect }) =>
 
     try {
       const endpoint = getPopularProductsEndpoint();
+      console.log('🌐 [PopularProducts] Fetching from:', endpoint);
       const response = await fetch(endpoint, { method: 'GET' });
       if (!response.ok) {
         throw new Error(`Request failed with status ${response.status}`);
       }
 
       const payload = await response.json();
+      console.log('📦 [PopularProducts] Raw API response type:', typeof payload, Array.isArray(payload) ? 'array' : 'object');
+      console.log('📦 [PopularProducts] Raw API response keys:', payload && typeof payload === 'object' ? Object.keys(payload) : 'N/A');
+      
+      // Log first 2 items safely
+      if (Array.isArray(payload) && payload.length > 0) {
+        console.log('📦 [PopularProducts] First product raw:', JSON.stringify(payload[0], null, 2));
+      } else if (payload && typeof payload === 'object') {
+        console.log('📦 [PopularProducts] Payload structure:', JSON.stringify(payload, null, 2).substring(0, 1000));
+      }
+      
       const normalized = normalizePopularProducts(payload);
+      console.log('✅ [PopularProducts] Normalized products count:', normalized.length);
+      
+      if (normalized.length > 0) {
+        console.log('✅ [PopularProducts] First normalized product:', {
+          display_name: normalized[0].display_name,
+          imageUrl: normalized[0].imageUrl,
+          best_price_imageUrl: normalized[0].best_price?.imageUrl,
+          products_with_images: normalized[0].products.filter(pr => pr.imageUrl).length,
+          all_product_images: normalized[0].products.map(p => ({ super: p.supermercado, imageUrl: p.imageUrl })),
+        });
+      }
+      
+      if (normalized.length === 0) {
+        throw new Error('No products found in response');
+      }
+      
       setPopularProducts(normalized);
+      setError(null); // Clear error if we have products
       autoScrollOffsetRef.current = 0;
       carouselRef.current?.scrollToOffset({ offset: 0, animated: false });
       scrollX.setValue(0);
       setLastUpdate(new Date());
     } catch (err) {
-      setError('No pudimos cargar los productos populares. Intenta nuevamente más tarde.');
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       console.error('[PopularProducts] Failed to fetch popular products:', err);
+      setError('No pudimos cargar los productos populares. Intenta nuevamente más tarde.');
+      // Don't clear products if we have them from a previous load
+      if (popularProducts.length === 0) {
+        setPopularProducts([]);
+      }
     } finally {
       setIsLoading(false);
     }
-  }, [scrollX]);
+  }, [scrollX, popularProducts.length]);
 
   useEffect(() => {
     loadPopularProducts();
@@ -238,7 +302,9 @@ const PopularProducts: React.FC<PopularProductsProps> = ({ onProductSelect }) =>
     return popularProducts;
   }, [popularProducts]);
 
-  useEffect(() => {
+  // Función para iniciar/reiniciar la animación del carrusel
+  const startCarouselAnimation = useCallback(() => {
+    // Limpiar animación anterior si existe
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current);
       animationFrameRef.current = null;
@@ -266,6 +332,13 @@ const PopularProducts: React.FC<PopularProductsProps> = ({ onProductSelect }) =>
     };
 
     animationFrameRef.current = requestAnimationFrame(step);
+  }, [carouselData.length, scrollX]);
+
+  // Efecto para iniciar la animación cuando cambian los datos
+  useEffect(() => {
+    if (isFocused) {
+      startCarouselAnimation();
+    }
 
     return () => {
       if (animationFrameRef.current) {
@@ -273,10 +346,25 @@ const PopularProducts: React.FC<PopularProductsProps> = ({ onProductSelect }) =>
         animationFrameRef.current = null;
       }
     };
-  }, [carouselData.length, scrollX]);
+  }, [carouselData.length, scrollX, startCarouselAnimation, isFocused]);
 
-  const handleSelectProduct = (product: GroupedProduct) => {
-    setSelectedProduct(product);
+  // Efecto para reiniciar la animación cuando la pantalla vuelve a estar enfocada
+  useEffect(() => {
+    if (isFocused && carouselData.length > 1) {
+      // Reiniciar la animación cuando la pantalla vuelve a estar enfocada
+      startCarouselAnimation();
+    }
+  }, [isFocused, carouselData.length, startCarouselAnimation]);
+
+  const handleSelectProduct = async (product: GroupedProduct) => {
+    // Obtener el nombre del producto para la búsqueda
+    const searchQuery = product.display_name || product.canonname || '';
+    if (!searchQuery) return;
+
+    // Navegar directamente a la búsqueda - el SearchScreen se encargará de llamar al endpoint
+    if (onProductSelect) {
+      onProductSelect(searchQuery);
+    }
   };
 
   const closeModal = () => setSelectedProduct(null);
