@@ -96,7 +96,9 @@ export const PopularProductCard: React.FC<PopularProductCardProps> = ({ product,
   }, [product.min_price, weight]);
 
   const mainImage = getImageSource(product);
-  const supermarketCount = product.total_supermarkets ?? product.products.length;
+  // SIEMPRE usar product.products.length para consistencia
+  // Esto asegura que el número mostrado coincida con los datos reales
+  const supermarketCount = product.products.length;
 
   const handlePress = () => {
     onPress?.(product);

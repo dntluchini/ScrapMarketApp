@@ -122,11 +122,37 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route }) => {
     };
   }, [isScraping, scrapingStartTime]);
 
+  const [hasPrefetchedData, setHasPrefetchedData] = useState(false);
+
+  // ⭐ PRIORITARIO: Procesar prefetchedGroups PRIMERO (viene de quick_search)
   React.useEffect(() => {
+    const prefetched = route?.params?.prefetchedGroups;
+    if (prefetched && Array.isArray(prefetched) && prefetched.length > 0) {
+      console.log('📦 Processing prefetchedGroups from quick_search:', prefetched.length, 'products');
+      setGroupedProducts(prefetched);
+      setFilteredGroups(prefetched);
+      setProducts([]);
+      setScrapedProducts([]);
+      setIsLoading(false);
+      setHasPrefetchedData(true); // Marcar que hay datos prefetched
+      // Limpiar el parámetro después de procesarlo
+      navigation.setParams({ prefetchedGroups: undefined });
+      console.log('✅ prefetchedGroups processed, will NOT execute search-in-db');
+    }
+  }, [route?.params?.prefetchedGroups, navigation]);
+
+  // ⭐ Ejecutar búsqueda automática SOLO si NO hay prefetchedGroups
+  React.useEffect(() => {
+    // Si hay prefetchedGroups, NO ejecutar búsqueda automática
+    if (route?.params?.prefetchedGroups && Array.isArray(route.params.prefetchedGroups) && route.params.prefetchedGroups.length > 0) {
+      console.log('📦 Has prefetchedGroups, skipping automatic search execution');
+      return;
+    }
+    
     if (route?.params?.initialQuery) {
       const query = route.params.initialQuery;
       setSearchQuery(query);
-      // Ejecutar búsqueda automáticamente cuando hay initialQuery
+      // Ejecutar búsqueda automáticamente cuando hay initialQuery (solo si NO hay prefetchedGroups)
       if (query && query.trim().length >= 2) {
         // Usar setTimeout para asegurar que el estado se actualice antes de buscar
         const timeoutId = setTimeout(() => {
@@ -136,19 +162,21 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route }) => {
         return () => clearTimeout(timeoutId);
       }
     }
-  }, [route?.params?.initialQuery]);
+  }, [route?.params?.initialQuery, route?.params?.prefetchedGroups]);
 
-  React.useEffect(() => {
-    const prefetched = route?.params?.prefetchedGroups;
-    if (prefetched && Array.isArray(prefetched) && prefetched.length > 0) {
-      setGroupedProducts(prefetched);
-      setFilteredGroups(prefetched);
-      setProducts([]);
-      setScrapedProducts([]);
-      setIsLoading(false);
-      navigation.setParams({ prefetchedGroups: undefined });
+  // ⭐ Limpiar input cuando el usuario empieza a escribir después de una búsqueda rápida
+  const handleSearchQueryChange = (text: string) => {
+    // Si hay datos prefetched y el usuario empieza a escribir, limpiar el input
+    if (hasPrefetchedData && text.length > 0 && text !== searchQuery) {
+      // Si el usuario está borrando o cambiando el texto, limpiar los datos prefetched
+      if (text.length < searchQuery.length || !searchQuery.startsWith(text)) {
+        setHasPrefetchedData(false);
+        setGroupedProducts([]);
+        setFilteredGroups([]);
+      }
     }
-  }, [route?.params?.prefetchedGroups, navigation]);
+    setSearchQuery(text);
+  };
 
   // Apply filters when grouped products or filters change
   React.useEffect(() => {
@@ -287,6 +315,18 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route }) => {
   const executeSearchWithQuery = async (queryToSearch: string) => {
     console.log('🔍 SearchScreen executeSearchWithQuery called with query:', queryToSearch);
     
+    // ⭐ NO ejecutar si hay prefetchedGroups (viene de quick_search)
+    if (route?.params?.prefetchedGroups && Array.isArray(route.params.prefetchedGroups) && route.params.prefetchedGroups.length > 0) {
+      console.log('📦 Has prefetchedGroups, blocking executeSearchWithQuery - will use quick_search data');
+      return;
+    }
+    
+    // ⭐ NO ejecutar si ya hay datos prefetched procesados
+    if (hasPrefetchedData) {
+      console.log('📦 Has prefetched data already processed, blocking executeSearchWithQuery');
+      return;
+    }
+    
     // Validar que el query no esté vacío y tenga al menos 2 caracteres
     if (!queryToSearch.trim() || queryToSearch.trim().length < 2) {
       console.log('⚠️ Query muy corto o vacío, no iniciando búsqueda');
@@ -313,29 +353,141 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route }) => {
     setProducts([]);
     setScrapedProducts([]);
     
+    // ⭐ DETECTAR SI VIENE DE PRODUCTOS POPULARES
+    const fromPopularProducts = route?.params?.fromPopularProducts || false;
+    if (fromPopularProducts) {
+      console.log('🔥 Popular product search detected:', queryToSearch, '- Will use search-popular-products endpoint');
+    }
+    
+    // ⭐ DETECTAR SI ES BÚSQUEDA POR CATEGORÍA
+    const isCategory = isCategorySearch(queryToSearch);
+    if (isCategory) {
+      console.log('🏷️ Category search detected:', queryToSearch, '- Will ONLY use search-in-db, NO scraping');
+    }
+    
     try {
-      // Primero intentar búsqueda en BD usando search-in-db
+      // ⭐ Si viene de productos populares, usar search-popular-products en lugar de search-in-db
+      if (fromPopularProducts) {
+        console.log('🔥 Using search-popular-products endpoint for popular product');
+        try {
+          const popularResponse = await n8nMcpService.searchPopularProducts(queryToSearch);
+          console.log('✅ search-popular-products response type:', typeof popularResponse);
+          console.log('✅ search-popular-products response keys:', popularResponse && typeof popularResponse === 'object' ? Object.keys(popularResponse) : 'N/A');
+          console.log('✅ search-popular-products response:', JSON.stringify(popularResponse, null, 2).substring(0, 1000));
+          
+          // Extraer el array de productos de la respuesta (mismo formato que search-in-db)
+          let productsData: any = null;
+          
+          // Usar la misma lógica de extracción que search-in-db
+          if (popularResponse && typeof popularResponse === 'object' && !Array.isArray(popularResponse)) {
+            if ((popularResponse.status === 'success' || popularResponse.status === 'found') && Array.isArray(popularResponse.data)) {
+              productsData = popularResponse.data;
+              console.log('✅ Found products via search-popular-products (format 1b - direct object with data):', productsData.length);
+            } else if (Array.isArray(popularResponse.data)) {
+              productsData = popularResponse.data;
+              console.log('✅ Found products via search-popular-products (format 1c - object with data array):', productsData.length);
+            }
+          } else if (Array.isArray(popularResponse) && popularResponse.length > 0) {
+            if (popularResponse[0] && typeof popularResponse[0] === 'object' && Array.isArray(popularResponse[0].supermarkets)) {
+              productsData = popularResponse;
+              console.log('✅ Found products via search-popular-products (format 3e - direct array of grouped products):', productsData.length);
+            } else {
+              productsData = popularResponse;
+              console.log('✅ Found products via search-popular-products (format 3b - direct array):', productsData.length);
+            }
+          }
+          
+          if (productsData && Array.isArray(productsData) && productsData.length > 0) {
+            console.log('✅ Processing', productsData.length, 'products from search-popular-products with query:', queryToSearch);
+            setSearchQuery(queryToSearch);
+            await processSearchResults(productsData, false, true, false, queryToSearch);
+            setIsSearching(false);
+            setIsLoading(false);
+            console.log('✅ Search completed with popular products results, stopping here');
+            return;
+          } else {
+            console.log('⚠️ search-popular-products returned no products');
+            setIsSearching(false);
+            setIsLoading(false);
+            return;
+          }
+        } catch (popularError) {
+          console.warn('⚠️ search-popular-products failed:', popularError);
+          setIsSearching(false);
+          setIsLoading(false);
+          return;
+        }
+      }
+      
+      // Primero intentar búsqueda en BD usando search-in-db (solo si NO viene de productos populares)
       console.log('🔍 Trying search-in-db endpoint first');
       try {
         const dbResponse = await n8nMcpService.searchProductsInDatabaseOnly(queryToSearch);
         console.log('✅ search-in-db response type:', typeof dbResponse);
-        console.log('✅ search-in-db response:', JSON.stringify(dbResponse, null, 2).substring(0, 500));
+        console.log('✅ search-in-db response keys:', dbResponse && typeof dbResponse === 'object' ? Object.keys(dbResponse) : 'N/A');
+        console.log('✅ search-in-db response:', JSON.stringify(dbResponse, null, 2).substring(0, 1000));
         
         // Extraer el array de productos de la respuesta
         let productsData: any = null;
         
-        // Caso 1: Respuesta dentro de un array con un objeto json (n8n webhook response format)
-        if (Array.isArray(dbResponse) && dbResponse.length > 0 && dbResponse[0] && dbResponse[0].json) {
-          const jsonData = dbResponse[0].json;
-          if (jsonData.status === 'found' && Array.isArray(jsonData.data)) {
-            productsData = jsonData.data;
-            console.log('✅ Found products in database via search-in-db (format 1 - array with json):', productsData.length);
+        // ⭐ CASO 1 (PRIORITARIO): Respuesta con estructura { status: 'success', items: [...] } (formato quick_search)
+        if (dbResponse && typeof dbResponse === 'object' && !Array.isArray(dbResponse)) {
+          // Verificar si tiene items array
+          if ((dbResponse.status === 'success' || dbResponse.status === 'found') && Array.isArray(dbResponse.items)) {
+            console.log('✅ Detected format with items array');
+            console.log('✅ Found products in database via search-in-db (format 1 - items array):', dbResponse.items.length, 'items');
+            // Extraer productos de cada item
+            const allProducts: any[] = [];
+            dbResponse.items.forEach((item: any) => {
+              if (Array.isArray(item.products)) {
+                console.log(`  📦 Item "${item.query || 'unknown'}": ${item.products.length} products`);
+                allProducts.push(...item.products);
+              } else if (item.products && typeof item.products === 'object') {
+                // Si products es un objeto único, convertirlo a array
+                console.log(`  📦 Item "${item.query || 'unknown'}": 1 product (object)`);
+                allProducts.push(item.products);
+              }
+            });
+            productsData = allProducts;
+            console.log('✅ Extracted', productsData.length, 'total products from items array');
+          }
+          // ⭐ NUEVO: Verificar si tiene data array con productos ya agrupados (formato directo)
+          else if ((dbResponse.status === 'success' || dbResponse.status === 'found') && Array.isArray(dbResponse.data)) {
+            productsData = dbResponse.data;
+            console.log('✅ Found products in database via search-in-db (format 1b - direct object with data):', productsData.length);
+            // Verificar si el primer item tiene supermarkets (ya agrupado)
+            if (productsData.length > 0 && productsData[0] && productsData[0].supermarkets && Array.isArray(productsData[0].supermarkets)) {
+              console.log('✅ Products are already grouped (have supermarkets array)');
+            }
+          }
+          // ⭐ NUEVO: Verificar si es un array directo dentro del objeto (sin status)
+          else if (Array.isArray(dbResponse.data)) {
+            productsData = dbResponse.data;
+            console.log('✅ Found products in database via search-in-db (format 1c - object with data array, no status):', productsData.length);
           }
         }
-        // Caso 2: Respuesta directa con estructura { status, data, ... }
-        else if (dbResponse && typeof dbResponse === 'object' && dbResponse.status === 'found' && Array.isArray(dbResponse.data)) {
-          productsData = dbResponse.data;
-          console.log('✅ Found products in database via search-in-db (format 2 - direct object):', productsData.length);
+        // Caso 2: Respuesta dentro de un array con un objeto json (n8n webhook response format)
+        else if (Array.isArray(dbResponse) && dbResponse.length > 0 && dbResponse[0] && dbResponse[0].json) {
+          const jsonData = dbResponse[0].json;
+          // Verificar si tiene items array
+          if ((jsonData.status === 'success' || jsonData.status === 'found') && Array.isArray(jsonData.items)) {
+            console.log('✅ Found products in database via search-in-db (format 2a - array with json.items):', jsonData.items.length, 'items');
+            const allProducts: any[] = [];
+            jsonData.items.forEach((item: any) => {
+              if (Array.isArray(item.products)) {
+                allProducts.push(...item.products);
+              } else if (item.products && typeof item.products === 'object') {
+                allProducts.push(item.products);
+              }
+            });
+            productsData = allProducts;
+            console.log('✅ Extracted', productsData.length, 'total products from json.items array');
+          }
+          // Verificar si tiene data array
+          else if (jsonData.status === 'found' && Array.isArray(jsonData.data)) {
+            productsData = jsonData.data;
+            console.log('✅ Found products in database via search-in-db (format 2b - array with json.data):', productsData.length);
+          }
         }
         // Caso 3: Respuesta es directamente un array de productos
         else if (Array.isArray(dbResponse) && dbResponse.length > 0) {
@@ -343,10 +495,31 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route }) => {
           if (dbResponse[0] && typeof dbResponse[0] === 'object' && dbResponse[0].status === 'found' && Array.isArray(dbResponse[0].data)) {
             productsData = dbResponse[0].data;
             console.log('✅ Found products in database via search-in-db (format 3a - array with status/data):', productsData.length);
+          }
+          // ⭐ NUEVO: Verificar si es array de objetos con json wrapper [{ json: { data: [...] } }]
+          else if (dbResponse[0] && typeof dbResponse[0] === 'object' && dbResponse[0].json) {
+            const jsonData = dbResponse[0].json;
+            if (Array.isArray(jsonData.data)) {
+              productsData = jsonData.data;
+              console.log('✅ Found products in database via search-in-db (format 3c - array with json.data):', productsData.length);
+            } else if (Array.isArray(jsonData)) {
+              productsData = jsonData;
+              console.log('✅ Found products in database via search-in-db (format 3d - array with json as array):', productsData.length);
+            }
+          }
+          // ⭐ NUEVO: Verificar si el primer elemento tiene supermarkets (array directo de productos agrupados)
+          else if (dbResponse[0] && typeof dbResponse[0] === 'object' && Array.isArray(dbResponse[0].supermarkets)) {
+            productsData = dbResponse;
+            console.log('✅ Found products in database via search-in-db (format 3e - direct array of grouped products):', productsData.length);
           } else {
             // Array directo de productos (ya agrupados)
             productsData = dbResponse;
             console.log('✅ Found products in database via search-in-db (format 3b - direct array):', productsData.length);
+            // Verificar estructura del primer elemento
+            if (productsData[0] && typeof productsData[0] === 'object') {
+              console.log('🔍 First item keys:', Object.keys(productsData[0]));
+              console.log('🔍 First item has supermarkets?', !!(productsData[0].supermarkets && Array.isArray(productsData[0].supermarkets)));
+            }
           }
         }
         // Caso 4: Respuesta dentro de un objeto json (n8n puede envolver la respuesta)
@@ -355,22 +528,84 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route }) => {
           console.log('✅ Found products in database via search-in-db (format 4 - nested json):', productsData.length);
         }
         
+        // ⭐ CRÍTICO: Verificar si tenemos productos válidos antes de continuar
         if (productsData && Array.isArray(productsData) && productsData.length > 0) {
           console.log('✅ Processing', productsData.length, 'products from search-in-db with query:', queryToSearch);
+          // ⭐ LOG DETALLADO: Verificar que tenemos todos los productos
+          console.log('🔍 Full productsData array length:', productsData.length);
+          productsData.forEach((product, index) => {
+            console.log(`  📦 Product ${index + 1}:`, {
+              canonname: product.canonname || 'NO NAME',
+              hasSupermarkets: !!(product.supermarkets && Array.isArray(product.supermarkets)),
+              supermarketsCount: product.supermarkets?.length || 0
+            });
+          });
+          // Log detallado del primer producto para debugging
+          if (productsData[0]) {
+            console.log('🔍 First product structure:', {
+              hasCanonname: !!productsData[0].canonname,
+              hasSupermarkets: !!(productsData[0].supermarkets && Array.isArray(productsData[0].supermarkets)),
+              supermarketsCount: productsData[0].supermarkets?.length || 0,
+              keys: Object.keys(productsData[0])
+            });
+          }
           // Asegurar que searchQuery esté actualizado antes de procesar
           setSearchQuery(queryToSearch);
-          // Pasar fromDatabase=true para desactivar el filtro de relevancia
-          await processSearchResults(productsData, false, true);
+          // Pasar fromDatabase=true y queryOverride para desactivar el filtro de relevancia
+          // También detectar si es búsqueda por categoría
+          await processSearchResults(productsData, false, true, false, queryToSearch);
+          // ⭐ CRÍTICO: Detener estados de búsqueda y salir temprano
+          setIsSearching(false);
+          setIsLoading(false);
+          console.log('✅ Search completed with database results, stopping here');
           return; // Salir temprano si encontramos resultados
-        } else if (dbResponse && typeof dbResponse === 'object' && dbResponse.status === 'not_found') {
-          console.log('⚠️ No products found in database via search-in-db');
-          // Continuar con el flujo normal de scraping
-        } else {
-          console.log('⚠️ Unexpected response format from search-in-db, falling back to normal search');
+        } 
+        // Si dbResponse es un array vacío, también detener aquí
+        else if (Array.isArray(dbResponse) && dbResponse.length === 0) {
+          console.log('⚠️ search-in-db returned empty array, no products found');
+          setIsSearching(false);
+          setIsLoading(false);
+          return; // No continuar con scraping si la respuesta fue vacía
+        }
+        // Si tiene status 'not_found', también detener
+        else if (dbResponse && typeof dbResponse === 'object' && dbResponse.status === 'not_found') {
+          console.log('⚠️ No products found in database via search-in-db (status: not_found)');
+          setIsSearching(false);
+          setIsLoading(false);
+          return; // No continuar con scraping
+        } 
+        // Si no se pudo parsear la respuesta pero no es un error, también detener
+        else if (!productsData) {
+          console.log('⚠️ Could not extract products from search-in-db response, but response exists');
+          console.log('⚠️ Response type:', typeof dbResponse, Array.isArray(dbResponse) ? 'array' : 'object');
+          console.log('⚠️ Response sample:', JSON.stringify(dbResponse, null, 2).substring(0, 500));
+          setIsSearching(false);
+          setIsLoading(false);
+          // ⭐ Si es búsqueda por categoría, NO continuar con scraping
+          if (isCategory) {
+            console.log('🏷️ Category search: Stopping here, will NOT call search-products-complete');
+            return;
+          }
+          return; // No continuar con scraping si no pudimos parsear
         }
       } catch (dbError) {
-        console.warn('⚠️ search-in-db failed, falling back to normal search:', dbError);
-        // Continuar con el flujo normal
+        console.warn('⚠️ search-in-db failed:', dbError);
+        // ⭐ Si es búsqueda por categoría, NO continuar con scraping aunque haya error
+        if (isCategory) {
+          console.log('🏷️ Category search: search-in-db failed, but will NOT fallback to scraping');
+          setIsSearching(false);
+          setIsLoading(false);
+          return;
+        }
+        // Solo continuar con scraping si NO es categoría y hubo un error real
+      }
+      
+      // ⭐ Solo llegar aquí si:
+      // 1. NO es búsqueda por categoría
+      // 2. Y search-in-db falló con un error real (no respuesta vacía)
+      if (isCategory) {
+        console.log('🏷️ Category search completed, will NOT call search-products-complete');
+        return;
       }
       
       console.log('🔍 Using new realtime scraping flow');
@@ -391,21 +626,47 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route }) => {
         console.log('🔍 productsData structure:', typeof productsData, productsData);
         
         // Verificar si es un objeto con estructura anidada
-        if (productsData && typeof productsData === 'object' && !Array.isArray(productsData) && productsData.data && Array.isArray(productsData.data)) {
-          console.log('🔍 Extracting nested data array:', productsData.data.length, 'products');
-          productsData = productsData.data;
+        if (productsData && typeof productsData === 'object' && !Array.isArray(productsData)) {
+          // ⭐ CASO: Formato con items array { status: 'success', items: [...] }
+          if (Array.isArray(productsData.items)) {
+            console.log('🔍 Extracting products from items array:', productsData.items.length, 'items');
+            const allProducts: any[] = [];
+            productsData.items.forEach((item: any) => {
+              if (Array.isArray(item.products)) {
+                allProducts.push(...item.products);
+              } else if (item.products && typeof item.products === 'object') {
+                allProducts.push(item.products);
+              }
+            });
+            productsData = allProducts;
+            console.log('🔍 Extracted', productsData.length, 'products from items');
+          }
+          // Caso: estructura { data: [...] }
+          else if (Array.isArray(productsData.data)) {
+            console.log('🔍 Extracting nested data array:', productsData.data.length, 'products');
+            productsData = productsData.data;
+            // Verificar si los productos ya están agrupados
+            if (productsData.length > 0 && productsData[0] && productsData[0].supermarkets && Array.isArray(productsData[0].supermarkets)) {
+              console.log('✅ Products are already grouped (have supermarkets array)');
+            }
+          }
         } else if (Array.isArray(productsData) && productsData.length === 1 && productsData[0] && typeof productsData[0] === 'object' && productsData[0].data && Array.isArray(productsData[0].data)) {
           console.log('🔍 Extracting nested data from single-item array:', productsData[0].data.length, 'products');
           productsData = productsData[0].data;
         } else if (Array.isArray(productsData)) {
           console.log('🔍 Data is already an array:', productsData.length, 'products');
+          // Verificar si los productos ya están agrupados
+          if (productsData.length > 0 && productsData[0] && productsData[0].supermarkets && Array.isArray(productsData[0].supermarkets)) {
+            console.log('✅ Products are already grouped (have supermarkets array)');
+            console.log('🔍 First product has', productsData[0].supermarkets.length, 'supermarkets');
+          }
         } else {
           console.log('🔍 No nested structure found, using data as-is');
         }
         
         console.log('🔍 Final productsData to process:', typeof productsData, Array.isArray(productsData) ? productsData.length : 'not array');
         
-        await processSearchResults(productsData, false);
+        await processSearchResults(productsData, false, false, false, queryToSearch);
         
                   } else if (initialResponse.status === 'scraped') {
                     // Productos scrapeados en tiempo real
@@ -506,9 +767,25 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route }) => {
     }
   };
 
+  // Lista de categorías conocidas para detectar búsquedas por categoría
+  // Estas son las mismas que se usan en HomeScreen para quick search
+  const CATEGORY_QUERIES = ['limpieza', 'vegetales', 'carnes', 'bebidas', 'lácteos', 'lacteos', 'panadería', 'panaderia', 'gaseosas', 'galletitas', 'alfajores'];
+  
+  // Función para detectar si el query es una búsqueda por categoría
+  const isCategorySearch = (query: string): boolean => {
+    const normalizedQuery = query.trim().toLowerCase();
+    return CATEGORY_QUERIES.some(cat => normalizedQuery === cat || normalizedQuery.includes(cat));
+  };
+
   // Función auxiliar para procesar resultados de búsqueda
-  const processSearchResults = async (productsArray: any[], isScraped: boolean, fromDatabase: boolean = false) => {
-    console.log('🔍 Processing search results:', productsArray.length, 'isScraped:', isScraped, 'fromDatabase:', fromDatabase);
+  const processSearchResults = async (productsArray: any[], isScraped: boolean, fromDatabase: boolean = false, isCategorySearch: boolean = false, queryOverride?: string) => {
+    // Detectar si es búsqueda por categoría basándose en el query
+    // Usar queryOverride si se proporciona (para evitar problemas con estado asíncrono)
+    const queryToCheck = (queryOverride || searchQuery).trim().toLowerCase();
+    const detectedCategorySearch = CATEGORY_QUERIES.some(cat => queryToCheck === cat || queryToCheck.includes(cat));
+    const shouldSkipRelevanceFilter = fromDatabase || isCategorySearch || detectedCategorySearch;
+    
+    console.log('🔍 Processing search results:', productsArray.length, 'isScraped:', isScraped, 'fromDatabase:', fromDatabase, 'isCategorySearch:', isCategorySearch || detectedCategorySearch, 'query:', queryToCheck);
     
     let groupedProducts: GroupedProduct[] = [];
     
@@ -527,7 +804,17 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route }) => {
         
         // Convert grouped data to GroupedProduct interface
         console.log('🔍 Converting', productsArray.length, 'database products to GroupedProduct');
-        groupedProducts = productsArray.map((item: any) => {
+        console.log('🔍 Full productsArray received:', productsArray.length, 'items');
+        // ⭐ LOG: Verificar cada producto antes de procesar
+        productsArray.forEach((item, idx) => {
+          console.log(`  📦 Processing product ${idx + 1}/${productsArray.length}:`, {
+            canonname: item.canonname || 'NO NAME',
+            hasSupermarkets: !!(item.supermarkets && Array.isArray(item.supermarkets)),
+            supermarketsCount: item.supermarkets?.length || 0
+          });
+        });
+        groupedProducts = productsArray.map((item: any, index: number) => {
+          console.log(`🔍 Mapping product ${index + 1}/${productsArray.length}: ${item.canonname || 'NO NAME'}`);
           const groupImage = resolveImageUrl(item);
           const mappedProducts: Product[] = item.supermarkets.map((supermarket: any) => {
             const productImage = resolveImageUrl(supermarket) || groupImage;
@@ -687,11 +974,23 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route }) => {
         });
         
         console.log('🔍 Converted to', groupedProducts.length, 'GroupedProducts');
+        // ⭐ LOG CRÍTICO: Verificar que todos los productos se procesaron
+        if (groupedProducts.length !== productsArray.length) {
+          console.error(`❌ ERROR: Expected ${productsArray.length} products but only got ${groupedProducts.length} grouped products!`);
+        } else {
+          console.log(`✅ Successfully converted all ${productsArray.length} products to grouped products`);
+        }
+        // Log de cada producto agrupado
+        groupedProducts.forEach((group, idx) => {
+          console.log(`  ✅ Grouped product ${idx + 1}/${groupedProducts.length}: ${group.display_name} (${group.total_supermarkets} supermarkets)`);
+        });
         
         // Aplicar filtrado de relevancia a productos ya agrupados de BD
-        // NOTA: Si los productos vienen directamente de search-in-db, NO aplicar filtro de relevancia
+        // NOTA: NO aplicar filtro de relevancia si:
+        // 1. Los productos vienen directamente de search-in-db (fromDatabase=true)
+        // 2. Es una búsqueda por categoría (isCategorySearch=true o query es una categoría conocida)
         // ya que fueron buscados específicamente y deben mostrarse todos
-        if (!fromDatabase) {
+        if (!shouldSkipRelevanceFilter) {
           const currentQuery = searchQuery.trim();
           if (currentQuery && currentQuery.length >= 2) {
             const filteredGroups = groupedProducts.filter(group => {
@@ -714,7 +1013,8 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route }) => {
             console.log('⚠️ No search query available for relevance filtering, showing all products');
           }
         } else {
-          console.log('✅ Products from database search, skipping relevance filter - showing all', groupedProducts.length, 'products');
+          const reason = fromDatabase ? 'database search' : (isCategorySearch || detectedCategorySearch ? 'category search' : 'unknown');
+          console.log(`✅ Skipping relevance filter (${reason}) - showing all`, groupedProducts.length, 'products');
         }
         
         // Set individual products for compatibility
@@ -869,13 +1169,24 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route }) => {
     }
     
     // Sort by relevance
+    console.log('🔍 Before sorting: groupedProducts.length =', groupedProducts.length);
     const sortedGroups = productGroupingService.sortGroups(groupedProducts, searchQuery);
-    console.log('🔍 Sorted groups:', sortedGroups.length);
+    console.log('🔍 After sorting: sortedGroups.length =', sortedGroups.length);
+    // ⭐ LOG CRÍTICO: Verificar que no se perdieron productos al ordenar
+    if (sortedGroups.length !== groupedProducts.length) {
+      console.error(`❌ ERROR: Lost products during sorting! Had ${groupedProducts.length} but now have ${sortedGroups.length}`);
+    } else {
+      console.log(`✅ All ${groupedProducts.length} products preserved after sorting`);
+    }
     
     if (isScraped) {
+      console.log('🔍 Setting scrapedProducts:', sortedGroups.length, 'products');
       setScrapedProducts(sortedGroups);
     } else {
+      console.log('🔍 Setting groupedProducts:', sortedGroups.length, 'products');
       setGroupedProducts(sortedGroups);
+      // ⭐ LOG: Verificar que se establecieron correctamente
+      console.log('🔍 groupedProducts state will be updated with', sortedGroups.length, 'products');
     }
   };
 
@@ -994,9 +1305,18 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route }) => {
             style={styles.searchInput}
             placeholder="Search for products..."
             value={searchQuery}
-            onChangeText={setSearchQuery}
+            onChangeText={handleSearchQueryChange}
             onSubmitEditing={handleSearch}
             returnKeyType="search"
+            onFocus={() => {
+              // Si hay datos prefetched y el usuario hace focus, limpiar el input para nueva búsqueda
+              if (hasPrefetchedData && searchQuery) {
+                setSearchQuery('');
+                setHasPrefetchedData(false);
+                setGroupedProducts([]);
+                setFilteredGroups([]);
+              }
+            }}
           />
         </View>
         <View style={styles.searchActions}>

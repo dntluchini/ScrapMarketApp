@@ -66,12 +66,16 @@ npx tsc --noEmit          # Verificación de TypeScript en modo estricto
 
 ## 🔁 Workflows Clave de n8n
 
-| Workflow | ID | Trigger / Endpoint |
-| --- | --- | --- |
-| `search_in_db` | `Rk9j8ugeiZoXyR2f` | `POST /webhook/search-in-db` |
-| `add_product_to_db` | `MvK9RbdyRmPnrc6W` | `POST /webhook/add_product_to_db` |
-| `definitive_scraper_complete_optimized` | `5ApPJXfntWZn3nda` | `POST /webhook/search-products-complete` |
-| `predictive_cache_popular_products` | `IB4P3zFPnQn0XIuJ` | **Cron** `0 */6 * * *` (batch de caché predictivo) |
+| Workflow | ID | Trigger / Endpoint | Uso |
+| --- | --- | --- | --- |
+| `search_in_db` | `Rk9j8ugeiZoXyR2f` | `GET /webhook/search-in-db?q=query` | Búsquedas manuales (primera opción) |
+| `quick_search` | - | `GET /webhook/quick_search?q=categoria` | Búsquedas por categoría (Limpieza, Vegetales, etc.) |
+| `search-popular-products` | - | `GET /webhook/search-popular-products?q=producto` | Búsquedas desde carrusel de productos populares |
+| `add_product_to_db` | `MvK9RbdyRmPnrc6W` | `POST /webhook/add_product_to_db` | Guardar productos scrapeados |
+| `definitive_scraper_complete_optimized` | `5ApPJXfntWZn3nda` | `POST /webhook/search-products-complete` | Búsquedas manuales (fallback si search-in-db no encuentra) |
+| `predictive_cache_popular_products` | `IB4P3zFPnQn0XIuJ` | **Cron** `0 */6 * * *` | Batch de caché predictivo para productos populares |
+
+**Nota:** Ver [`docs/SEARCH_ENDPOINTS.md`](docs/SEARCH_ENDPOINTS.md) para detalles completos sobre cuándo y cómo se usa cada endpoint.
 
 Los exports JSON de cada workflow están en el repositorio (`/webhook_*.json`) y están documentados en [`docs/cache_predictive_workflow.md`](docs/cache_predictive_workflow.md) y [`docs/MCP_SETUP.md`](docs/MCP_SETUP.md).
 
@@ -92,6 +96,10 @@ Los exports JSON de cada workflow están en el repositorio (`/webhook_*.json`) y
 - Búsqueda automática desde carousel de productos populares
 - Gestión de lifecycle del carousel (pause/resume)
 - Capitalización de nombres de productos y formato de marcas
+- **Endpoints especializados por tipo de búsqueda** (quick_search, search-popular-products)
+- **Prevención de llamadas innecesarias** a search-in-db cuando hay datos prefetched
+- **Limpieza automática de input** después de búsquedas rápidas
+- **Detección de búsquedas por categoría** para evitar filtros de relevancia incorrectos
 
 El backlog completo, ownership y roles de agentes están rastreados en `context.json`.
 

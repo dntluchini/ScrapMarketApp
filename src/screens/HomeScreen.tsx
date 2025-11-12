@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import PopularProducts from '../components/PopularProducts';
+import { n8nMcpService } from '../services/n8nMcpService';
 
 interface HomeScreenProps {
   navigation: any;
@@ -24,10 +25,14 @@ type QuickSearchItem = {
   iconSet?: 'ion' | 'mci';
 };
 
-const QUICK_SEARCH_ENDPOINT = 'http://192.168.1.99:5678/webhook/quick_search';
+// Usar la misma base URL que n8nMcpService para mantener consistencia
+const getQuickSearchEndpoint = (): string => {
+  const baseUrl = n8nMcpService.getConfig().baseUrl;
+  return `${baseUrl}/webhook/quick_search`;
+};
 
 const QUICK_SEARCH_ITEMS: QuickSearchItem[] = [
-  { icon: 'water-outline', label: 'Agua', query: 'agua', color: '#0ea5e9', iconSet: 'ion' },
+  { icon: 'broom', label: 'Limpieza', query: 'limpieza', color: '#0ea5e9', iconSet: 'mci' },
   { icon: 'leaf-outline', label: 'Vegetales', query: 'vegetales', color: '#22c55e', iconSet: 'ion' },
   { icon: 'food-steak', label: 'Carnes', query: 'carnes', color: '#ef4444', iconSet: 'mci' },
   { icon: 'wine-outline', label: 'Bebidas', query: 'bebidas', color: '#f97316', iconSet: 'ion' },
@@ -39,10 +44,144 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const [quickSearchLoading, setQuickSearchLoading] = useState<string | null>(null);
 
   const handleProductSelect = (query: string) => {
-    navigation.navigate('Search', { initialQuery: query });
+    navigation.navigate('Search', { initialQuery: query, fromPopularProducts: true });
   };
 
   const normalizeQuickSearchResponse = (payload: any): any[] => {
+    console.log('📦 [HomeScreen] Normalizing quick search response:', typeof payload, Array.isArray(payload) ? 'array' : 'object');
+    
+    // ⭐ CASO 0: Array directo de productos con supermarkets (formato más común)
+    if (Array.isArray(payload) && payload.length > 0) {
+      const firstItem = payload[0];
+      // Verificar si el primer item tiene supermarkets directamente (sin wrapper json)
+      if (firstItem && typeof firstItem === 'object' && !firstItem.json && Array.isArray(firstItem.supermarkets)) {
+        console.log('📦 [HomeScreen] Detected direct array format with supermarkets: [product1, product2, ...]');
+        return payload.map((product: any) => {
+          const supermarkets = Array.isArray(product.supermarkets) ? product.supermarkets : [];
+          const mappedSupermarkets = supermarkets.map((market: any) => ({
+            canonid: product.canonid || '',
+            canonname: product.canonname || product.display_name || 'Producto',
+            precio: Number(market.precio ?? market.price ?? 0),
+            supermercado: market.supermercado || market.super || market.supermarket || 'supermercado',
+            ean: product.ean || product.canonid || '',
+            exact_weight: product.exact_weight || '',
+            stock: Boolean(market.stock),
+            url: market.url || '',
+            imageUrl: market.imageUrl || product.imageUrl,
+            brand: product.brand,
+            addToCartLink: market.addToCartLink || market.add_to_cart_link,
+          }));
+
+          return {
+            ean: product.ean || product.canonid || '',
+            exact_weight: product.exact_weight || '',
+            brand: product.brand || '',
+            products: mappedSupermarkets,
+            min_price: Number(product.min_price ?? 0),
+            max_price: Number(product.max_price ?? 0),
+            total_supermarkets: product.total_supermarkets ?? supermarkets.length,
+            alternative_names: Array.isArray(product.alternative_names) ? product.alternative_names : [],
+            display_name: product.canonname || product.display_name || 'Producto',
+            has_stock: mappedSupermarkets.some(entry => entry.stock),
+            best_price: mappedSupermarkets.length > 0
+              ? mappedSupermarkets.reduce((best: any, current: any) =>
+                  current.precio < best.precio ? current : best
+                )
+              : undefined,
+            imageUrl: product.imageUrl,
+          };
+        });
+      }
+    }
+    
+    // ⭐ CASO 1: Array de productos directamente [{ json: product1 }, { json: product2 }, ...]
+    if (Array.isArray(payload) && payload.length > 0) {
+      const firstItem = payload[0];
+      
+      // Si es formato n8n con { json: { status, data: [...] } }
+      if (firstItem.json && firstItem.json.status && Array.isArray(firstItem.json.data)) {
+        console.log('📦 [HomeScreen] Detected n8n format: [{ json: { status, data: [...] } }]');
+        const products = firstItem.json.data;
+        return products.map((product: any) => {
+          const supermarkets = Array.isArray(product.supermarkets) ? product.supermarkets : [];
+          const mappedSupermarkets = supermarkets.map((market: any) => ({
+            canonid: product.canonid || '',
+            canonname: product.canonname || product.display_name || 'Producto',
+            precio: Number(market.precio ?? market.price ?? 0),
+            supermercado: market.supermercado || market.super || market.supermarket || 'supermercado',
+            ean: product.ean || product.canonid || '',
+            exact_weight: product.exact_weight || '',
+            stock: Boolean(market.stock),
+            url: market.url || '',
+            imageUrl: market.imageUrl || product.imageUrl,
+            brand: product.brand,
+            addToCartLink: market.addToCartLink || market.add_to_cart_link,
+          }));
+
+          return {
+            ean: product.ean || product.canonid || '',
+            exact_weight: product.exact_weight || '',
+            brand: product.brand || '',
+            products: mappedSupermarkets,
+            min_price: Number(product.min_price ?? 0),
+            max_price: Number(product.max_price ?? 0),
+            total_supermarkets: product.total_supermarkets ?? supermarkets.length,
+            alternative_names: Array.isArray(product.alternative_names) ? product.alternative_names : [],
+            display_name: product.canonname || product.display_name || 'Producto',
+            has_stock: mappedSupermarkets.some(entry => entry.stock),
+            best_price: mappedSupermarkets.length > 0
+              ? mappedSupermarkets.reduce((best: any, current: any) =>
+                  current.precio < best.precio ? current : best
+                )
+              : undefined,
+            imageUrl: product.imageUrl,
+          };
+        });
+      }
+      
+      // Si es array directo de productos [{ canonname, supermarkets, ... }, ...]
+      if (firstItem.canonname || firstItem.supermarkets || (firstItem.json && (firstItem.json.canonname || firstItem.json.supermarkets))) {
+        console.log('📦 [HomeScreen] Detected direct array format: [product1, product2, ...]');
+        return payload.map((item: any) => {
+          const product = item.json || item;
+          const supermarkets = Array.isArray(product.supermarkets) ? product.supermarkets : [];
+          const mappedSupermarkets = supermarkets.map((market: any) => ({
+            canonid: product.canonid || '',
+            canonname: product.canonname || product.display_name || 'Producto',
+            precio: Number(market.precio ?? market.price ?? 0),
+            supermercado: market.supermercado || market.super || market.supermarket || 'supermercado',
+            ean: product.ean || product.canonid || '',
+            exact_weight: product.exact_weight || '',
+            stock: Boolean(market.stock),
+            url: market.url || '',
+            imageUrl: market.imageUrl || product.imageUrl,
+            brand: product.brand,
+            addToCartLink: market.addToCartLink || market.add_to_cart_link,
+          }));
+
+          return {
+            ean: product.ean || product.canonid || '',
+            exact_weight: product.exact_weight || '',
+            brand: product.brand || '',
+            products: mappedSupermarkets,
+            min_price: Number(product.min_price ?? 0),
+            max_price: Number(product.max_price ?? 0),
+            total_supermarkets: product.total_supermarkets ?? supermarkets.length,
+            alternative_names: Array.isArray(product.alternative_names) ? product.alternative_names : [],
+            display_name: product.canonname || product.display_name || 'Producto',
+            has_stock: mappedSupermarkets.some(entry => entry.stock),
+            best_price: mappedSupermarkets.length > 0
+              ? mappedSupermarkets.reduce((best: any, current: any) =>
+                  current.precio < best.precio ? current : best
+                )
+              : undefined,
+            imageUrl: product.imageUrl,
+          };
+        });
+      }
+    }
+    
+    // ⭐ CASO 2: Formato antiguo (compatibilidad)
     const blocks = Array.isArray(payload) ? payload : [payload];
     const groups: any[] = [];
 
@@ -58,13 +197,14 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             canonid: product.canonid || meta.canonid || `quick-${index}`,
             canonname: product.canonname || meta.canonname || item.query || 'Producto',
             precio: Number(market.precio ?? market.price ?? product.min_price ?? 0),
-            supermercado: market.super || market.supermarket || 'supermercado',
+            supermercado: market.supermercado || market.super || market.supermarket || 'supermercado',
             ean: product.canonid || meta.canonid || '',
             exact_weight: product.exact_weight || meta.exact_weight || '',
             stock: Boolean(market.stock),
             url: market.url || '',
             imageUrl: market.imageUrl || product.imageUrl || meta.imageUrl,
             brand: product.brand || meta.brand,
+            addToCartLink: market.addToCartLink || market.add_to_cart_link,
           }));
 
           groups.push({
@@ -84,39 +224,54 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                     current.precio < best.precio ? current : best
                   )
                 : undefined,
+            imageUrl: product.imageUrl || meta.imageUrl,
           });
         });
       });
     });
 
+    console.log('📦 [HomeScreen] Normalized groups count:', groups.length);
     return groups;
   };
 
   const handleQuickSearch = async (item: QuickSearchItem) => {
     setQuickSearchLoading(item.query);
     try {
-      const response = await fetch(
-        `${QUICK_SEARCH_ENDPOINT}?q=${encodeURIComponent(item.query)}`
-      );
+      console.log('🔍 [HomeScreen] Quick search for:', item.label, 'query:', item.query);
+      const quickSearchUrl = `${getQuickSearchEndpoint()}?q=${encodeURIComponent(item.query)}`;
+      console.log('🔍 [HomeScreen] Quick search URL:', quickSearchUrl);
+      const response = await fetch(quickSearchUrl);
 
       if (!response.ok) {
         throw new Error('quick_search_failed');
       }
 
       const payload = await response.json();
+      console.log('📦 [HomeScreen] Quick search raw response:', typeof payload, Array.isArray(payload) ? `array[${payload.length}]` : 'object');
+      console.log('📦 [HomeScreen] Quick search response preview:', JSON.stringify(payload, null, 2).substring(0, 1000));
+      
       const prefetchedGroups = normalizeQuickSearchResponse(payload);
+      console.log('✅ [HomeScreen] Normalized groups:', prefetchedGroups.length);
+      
+      if (prefetchedGroups.length === 0) {
+        console.warn('⚠️ [HomeScreen] No groups normalized, falling back to regular search');
+        navigation.navigate('Search', { initialQuery: item.query });
+        return;
+      }
+      
       const targetQuery = item.query;
 
       navigation.navigate('Search', {
         initialQuery: targetQuery,
         prefetchedGroups,
         quickSearchMeta: { category: item.label, source: 'quick_search' },
+        fromQuickSearch: true, // ⭐ Marcar que viene de quick_search
       });
     } catch (error) {
-      console.error('Quick search error:', error);
+      console.error('❌ [HomeScreen] Quick search error:', error);
       Alert.alert(
         'No se pudo cargar',
-        'Intentaremos abrir la b\u00FAsqueda tradicional para esta categor\u00EDa.'
+        'Intentaremos abrir la búsqueda tradicional para esta categoría.'
       );
       navigation.navigate('Search', { initialQuery: item.query });
     } finally {

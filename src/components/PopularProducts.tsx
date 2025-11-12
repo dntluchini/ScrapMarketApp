@@ -64,14 +64,45 @@ const collectProductEntries = (node: any, context: { meta?: any; query?: string 
   if (!node) return [];
 
   if (Array.isArray(node)) {
-    return node.flatMap(item => {
-      if (!item || typeof item !== 'object') return [];
+    console.log(`🔍 [collectProductEntries] Processing array with ${node.length} items`);
+    const results = node.flatMap((item, index) => {
+      if (!item || typeof item !== 'object') {
+        console.log(`  ⚠️ Item ${index} is not a valid object`);
+        return [];
+      }
+      
+      // ⭐ NUEVO: Manejar formato n8n { json: { status: 'success', data: [...] } }
+      if (item.json && typeof item.json === 'object') {
+        const jsonData = item.json;
+        
+        // Si tiene un array 'data' con productos, extraerlos
+        if (jsonData.status && Array.isArray(jsonData.data) && jsonData.data.length > 0) {
+          console.log(`  ✅ Item ${index}: Found { json: { status, data: [...] } } with ${jsonData.data.length} products`);
+          return jsonData.data.map((product: any) => ({
+            product: product,
+            context: context
+          }));
+        }
+        
+        // Si el json tiene estructura de producto directamente (canonid, canonname, supermarkets)
+        if (jsonData.canonid || jsonData.canonname || Array.isArray(jsonData.supermarkets)) {
+          console.log(`  ✅ Item ${index}: Found product in json: "${jsonData.canonname || jsonData.canonid}"`);
+          return [{ product: jsonData, context }];
+        }
+        
+        // Si no, intentar extraer recursivamente
+        return collectProductEntries(jsonData, context);
+      }
+      
       // Si el item tiene estructura de producto (canonid, canonname, supermarkets), retornarlo directamente
       if (item.canonid || item.canonname || Array.isArray(item.supermarkets)) {
+        console.log(`  ✅ Item ${index}: Found direct product: "${item.canonname || item.canonid}"`);
         return [{ product: item, context }];
       }
       return collectProductEntries(item, context);
     });
+    console.log(`🔍 [collectProductEntries] Returning ${results.length} products from array`);
+    return results;
   }
 
   if (Array.isArray(node.items)) {
@@ -82,6 +113,23 @@ const collectProductEntries = (node: any, context: { meta?: any; query?: string 
       }
       return collectProductEntries(item, itemContext);
     });
+  }
+
+  // ⭐ NUEVO: Manejar formato directo { status: 'success', data: [...] }
+  if (node.status && Array.isArray(node.data)) {
+    return node.data.map((product: any) => ({
+      product: product,
+      context: context
+    }));
+  }
+
+  // ⭐ NUEVO: Si el nodo es directamente un producto (tiene canonid/canonname pero no es array)
+  // Esto puede pasar si n8n retorna solo el primer item en lugar del array completo
+  if (node.canonid || node.canonname || Array.isArray(node.supermarkets)) {
+    // Si tiene estructura de producto, retornarlo como único producto
+    // PERO esto es un problema - deberíamos recibir múltiples productos
+    console.warn('⚠️ [PopularProducts] Received single product object instead of array. This may indicate n8n is only returning the first item.');
+    return [{ product: node, context }];
   }
 
   if (Array.isArray(node.data)) {
@@ -194,10 +242,9 @@ const normalizePopularProducts = (payload: any): GroupedProduct[] => {
         .map(String)
         .filter(Boolean);
 
-      // Calcular total_supermarkets desde el array supermarkets (más confiable)
-      const totalSupermarkets = mappedProducts.length > 0 
-        ? mappedProducts.length 
-        : Number(product.total_supermarkets ?? 0);
+      // Calcular total_supermarkets SIEMPRE desde el array mappedProducts
+      // Esto asegura consistencia con lo que se muestra en la card
+      const totalSupermarkets = mappedProducts.length;
 
       return {
         ean,
@@ -244,13 +291,86 @@ const PopularProducts: React.FC<PopularProductsProps> = ({ onProductSelect }) =>
 
       const payload = await response.json();
       console.log('📦 [PopularProducts] Raw API response type:', typeof payload, Array.isArray(payload) ? 'array' : 'object');
-      console.log('📦 [PopularProducts] Raw API response keys:', payload && typeof payload === 'object' ? Object.keys(payload) : 'N/A');
+      console.log('📦 [PopularProducts] Payload length/keys:', Array.isArray(payload) ? payload.length : (payload ? Object.keys(payload) : 'null'));
       
-      // Log first 2 items safely
+      // ⭐ CASO 1: Array de productos directamente [{ json: product1 }, { json: product2 }, ...]
       if (Array.isArray(payload) && payload.length > 0) {
-        console.log('📦 [PopularProducts] First product raw:', JSON.stringify(payload[0], null, 2));
-      } else if (payload && typeof payload === 'object') {
-        console.log('📦 [PopularProducts] Payload structure:', JSON.stringify(payload, null, 2).substring(0, 1000));
+        console.log('📦 [PopularProducts] Detected array format, length:', payload.length);
+        
+        // Verificar si es array de items n8n con { json: ... }
+        const firstItem = payload[0];
+        if (firstItem.json && typeof firstItem.json === 'object') {
+          const jsonData = firstItem.json;
+          
+          // Si el primer item tiene { json: { status, data: [...] } }
+          if (jsonData.status && Array.isArray(jsonData.data)) {
+            console.log('📦 [PopularProducts] Detected n8n format: [{ json: { status, data: [...] } }]');
+            console.log('📦 [PopularProducts] Products in data array:', jsonData.data.length);
+            if (jsonData.data.length > 0) {
+              console.log('📦 [PopularProducts] First product in data:', {
+                canonname: jsonData.data[0].canonname,
+                total_supermarkets: jsonData.data[0].total_supermarkets,
+                supermarkets_count: jsonData.data[0].supermarkets?.length
+              });
+            }
+          } 
+          // Si el primer item tiene { json: product } (producto directo)
+          else if (jsonData.canonid || jsonData.canonname || Array.isArray(jsonData.supermarkets)) {
+            console.log('📦 [PopularProducts] Detected n8n format: [{ json: product1 }, { json: product2 }, ...]');
+            console.log('📦 [PopularProducts] Total items in array:', payload.length);
+            console.log('📦 [PopularProducts] First product:', {
+              canonname: jsonData.canonname,
+              total_supermarkets: jsonData.total_supermarkets,
+              supermarkets_count: jsonData.supermarkets?.length
+            });
+            if (payload.length > 1) {
+              console.log('📦 [PopularProducts] Second product:', {
+                canonname: payload[1].json?.canonname || 'N/A',
+                total_supermarkets: payload[1].json?.total_supermarkets || 'N/A'
+              });
+            }
+          } else {
+            console.log('📦 [PopularProducts] First item structure:', JSON.stringify(firstItem, null, 2).substring(0, 500));
+          }
+        }
+        // Si es array de productos directamente (sin wrapper json)
+        else if (firstItem.canonid || firstItem.canonname || Array.isArray(firstItem.supermarkets)) {
+          console.log('📦 [PopularProducts] Detected direct array format: [product1, product2, ...]');
+          console.log('📦 [PopularProducts] Total products in array:', payload.length);
+          console.log('📦 [PopularProducts] First product:', {
+            canonname: firstItem.canonname,
+            total_supermarkets: firstItem.total_supermarkets,
+            supermarkets_count: firstItem.supermarkets?.length
+          });
+        } else {
+          console.log('📦 [PopularProducts] Unknown array format, first item:', JSON.stringify(firstItem, null, 2).substring(0, 500));
+        }
+      } 
+      // ⭐ CASO 2: Objeto único
+      else if (payload && typeof payload === 'object') {
+        // Detectar formato directo { status: 'success', data: [...] }
+        if (payload.status && Array.isArray(payload.data)) {
+          console.log('📦 [PopularProducts] Detected direct format: { status, data: [...] }');
+          console.log('📦 [PopularProducts] Products in data array:', payload.data.length);
+          if (payload.data.length > 0) {
+            console.log('📦 [PopularProducts] First product in data:', {
+              canonname: payload.data[0].canonname,
+              total_supermarkets: payload.data[0].total_supermarkets,
+              supermarkets_count: payload.data[0].supermarkets?.length
+            });
+          }
+        }
+        // Si es un producto individual directamente
+        else if (payload.canonid || payload.canonname || Array.isArray(payload.supermarkets)) {
+          console.warn('⚠️ [PopularProducts] Received single product object. Expected array of products.');
+          console.log('📦 [PopularProducts] Single product:', {
+            canonname: payload.canonname,
+            total_supermarkets: payload.total_supermarkets,
+            supermarkets_count: payload.supermarkets?.length
+          });
+        } else {
+          console.log('📦 [PopularProducts] Payload structure:', JSON.stringify(payload, null, 2).substring(0, 1000));
+        }
       }
       
       const normalized = normalizePopularProducts(payload);
@@ -263,6 +383,16 @@ const PopularProducts: React.FC<PopularProductsProps> = ({ onProductSelect }) =>
           best_price_imageUrl: normalized[0].best_price?.imageUrl,
           products_with_images: normalized[0].products.filter(pr => pr.imageUrl).length,
           all_product_images: normalized[0].products.map(p => ({ super: p.supermercado, imageUrl: p.imageUrl })),
+        });
+        
+        // 🔍 DEBUG: Verificar cantidad de supermercados
+        console.log('🔍 [DEBUG] Supermarket count validation:');
+        normalized.slice(0, 3).forEach((product, idx) => {
+          console.log(`  Product ${idx + 1}: "${product.display_name}"`);
+          console.log(`    - total_supermarkets (field): ${product.total_supermarkets}`);
+          console.log(`    - products.length (actual): ${product.products.length}`);
+          console.log(`    - Match: ${product.total_supermarkets === product.products.length ? '✅' : '❌'}`);
+          console.log(`    - Supermarkets: ${product.products.map(p => p.supermercado).join(', ')}`);
         });
       }
       
@@ -469,7 +599,7 @@ const PopularProducts: React.FC<PopularProductsProps> = ({ onProductSelect }) =>
 
                 <View style={styles.modalSection}>
                   <Text style={styles.sectionLabel}>
-                    Precios por supermercado ({selectedProduct.total_supermarkets || selectedProduct.products.length})
+                    Precios por supermercado ({selectedProduct.products.length})
                   </Text>
                   {selectedProduct.products.map((productItem, index) => {
                     const name = productItem.supermercado

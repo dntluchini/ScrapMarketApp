@@ -246,6 +246,36 @@ class N8nMcpService {
     }
   }
 
+  // Search popular products (for when clicking on popular product carousel)
+  async searchPopularProducts(query: string): Promise<any> {
+    const url = `${this.config.baseUrl}/webhook/search-popular-products?q=${encodeURIComponent(query)}`;
+    
+    const response = await this.makeRequest(url, {
+      method: 'GET',
+    });
+
+    if (!response.ok) {
+      throw new Error(`n8n Popular Products Search API error: ${response.status}`);
+    }
+
+    // Check if response has content
+    const text = await response.text();
+    if (!text || text.trim() === '') {
+      console.warn('⚠️ n8n popular products search returned empty response');
+      return [];
+    }
+
+    try {
+      const parsed = JSON.parse(text);
+      console.log('✅ Popular products search JSON parsed successfully:', parsed);
+      return parsed;
+    } catch (error) {
+      console.error('❌ Popular products search JSON Parse error:', error);
+      console.error('❌ Response text:', text);
+      throw new Error(`Invalid JSON response from n8n popular products search: ${text.substring(0, 100)}...`);
+    }
+  }
+
   // Get prices per market using n8n workflow
   async getPricesPerMarket(canonname: string): Promise<any> {
     const url = `${this.config.baseUrl}${this.workflows.prices.endpoint}?${this.workflows.prices.queryParam}=${encodeURIComponent(canonname)}`;
