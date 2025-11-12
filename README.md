@@ -1,11 +1,11 @@
 ﻿# ScrapMarket App
 
-[![Version](https://img.shields.io/badge/version-v1.2.0--beta-blue.svg)](https://github.com/dntluchini/ScrapMarketApp)
+[![Version](https://img.shields.io/badge/version-v1.4.0--beta-blue.svg)](https://github.com/dntluchini/ScrapMarketApp)
 [![Expo](https://img.shields.io/badge/Expo-SDK%2054-000020.svg)](https://expo.dev/)
 [![React Native](https://img.shields.io/badge/React%20Native-0.81-blue.svg)](https://reactnative.dev/)
 [![Status](https://img.shields.io/badge/status-Active%20Development-brightgreen.svg)](#roadmap)
 
-ScrapMarket App is a cross-platform mobile application that compares prices across VTEX-based supermarkets (Carrefour, Jumbo, Disco, Vea). It blends database lookups, on-demand scraping, and predictive caching to serve relevant results in seconds.
+ScrapMarket App is a cross-platform mobile application that compares prices across VTEX-based supermarkets (Carrefour, Jumbo, Disco, Vea). It blends database lookups, on-demand scraping, and predictive caching to serve relevant results in seconds. Now with integrated shopping cart functionality for seamless purchases.
 
 ---
 
@@ -13,9 +13,11 @@ ScrapMarket App is a cross-platform mobile application that compares prices acro
 
 - ⚡ Real-time search with automatic fallback to scraping when the database lacks fresh data.
 - 🧠 Intelligent grouping by `EAN / brand / weight` and supermarket price comparison per product.
+- 🛒 **Integrated shopping cart** with direct redirection to supermarket websites with correct quantities.
 - 🔄 Semantic rotation of popular products plus a scheduled predictive cache handled by n8n.
-- 📱 Mobile-first UX: skeleton loading, data-saver mode, pull-to-refresh, progressive rendering.
-- 🔒 Robust data layer with Zod validation, structured logging, and guarded error boundaries.
+- 📱 Mobile-first UX: skeleton loading, pull-to-refresh, progressive rendering, custom modals.
+- 🎨 **Animated cart badge** with bounce effect and real-time updates via observer pattern.
+- 🔒 Robust data layer with structured logging and guarded error boundaries.
 
 Further technical detail (services, agents, workflows) lives in [`context.json`](../context.json) and the [`docs/`](docs/) folder.
 
@@ -79,9 +81,17 @@ JSON exports for each workflow live in the repository (`/webhook_*.json`) and ar
 
 | Priority | Upcoming work |
 | --- | --- |
-| **High** | Redux Toolkit for global state, price alert system, price history, push notifications. |
-| **Medium** | Full offline mode, analytics/metrics, API gateway to abstract n8n, automated tests. |
+| **High** | AsyncStorage persistence for cart, Redux Toolkit for global state, price alert system, price history, push notifications. |
+| **Medium** | Full offline mode, analytics/metrics, API gateway to abstract n8n, automated tests, performance optimization. |
 | **Low** | Authentication, favourites, shopping list comparator, CI/CD, internationalisation. |
+
+✅ **Recently Completed:**
+- Shopping cart system with animated badge
+- Custom modals for better UX
+- Direct supermarket integration with quantity params
+- Automatic search from popular products carousel
+- Carousel lifecycle management (pause/resume)
+- Product name capitalization and brand formatting
 
 The full backlog, ownership and agent roles are tracked in `context.json`.
 
@@ -98,4 +108,31 @@ The full backlog, ownership and agent roles are tracked in `context.json`.
 
 ---
 
-> 💡 Active development · v1.2.0-beta
+## 🎯 Features
+
+### Core Functionality
+- ✅ Real-time product search with intelligent fallback
+- ✅ Price comparison across 4 major supermarkets
+- ✅ Smart product grouping by name/brand/weight
+- ✅ Popular products carousel with auto-rotation
+- ✅ Shopping cart with supermarket grouping
+- ✅ Direct purchase links with quantity params
+
+### UX/UI Features
+- ✅ Animated cart badge with bounce effect
+- ✅ Custom confirmation modals
+- ✅ Skeleton loading screens
+- ✅ Pull-to-refresh functionality
+- ✅ Progressive rendering
+- ✅ Error boundaries for robustness
+
+### Technical Features
+- ✅ Observer pattern for cart reactivity
+- ✅ Custom hooks (useCart)
+- ✅ TypeScript strict mode
+- ✅ React Navigation v7
+- ✅ Expo SDK 54
+
+---
+
+> 💡 Active development · v1.4.0-beta · 95% functional coverage
