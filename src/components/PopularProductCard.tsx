@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, Image } from 'react-native';
+import { TouchableOpacity } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 import { GroupedProduct, Product } from '../services/productGroupingService';
 import { formatPrice } from '../utils/productNameUtils';
@@ -7,7 +8,6 @@ import { formatPrice } from '../utils/productNameUtils';
 interface PopularProductCardProps {
   product: GroupedProduct;
   onPress?: (product: GroupedProduct) => void;
-  onAdd?: (product: GroupedProduct) => void;
 }
 
 type ParsedWeight = {
@@ -85,7 +85,7 @@ const capitalizeBrand = (brand: string): string => {
     .join(' ');
 };
 
-export const PopularProductCard: React.FC<PopularProductCardProps> = ({ product, onPress, onAdd }) => {
+export const PopularProductCard: React.FC<PopularProductCardProps> = ({ product, onPress }) => {
   const weight = useMemo(() => normalizeWeight(product.exact_weight), [product.exact_weight]);
   const pricePerUnit = useMemo(() => {
     if (!weight || weight.unit === 'un') return null;
@@ -104,20 +104,12 @@ export const PopularProductCard: React.FC<PopularProductCardProps> = ({ product,
     onPress?.(product);
   };
 
-  const handleAdd = (event: any) => {
-    event.stopPropagation();
-    if (onAdd) {
-      onAdd(product);
-    } else {
-      onPress?.(product);
-    }
-  };
-
   return (
     <TouchableOpacity 
       style={styles.card} 
       onPress={handlePress}
       activeOpacity={0.85}
+      delayPressIn={0}
     >
       <View style={styles.imageWrapper}>
         {mainImage ? (
@@ -127,9 +119,6 @@ export const PopularProductCard: React.FC<PopularProductCardProps> = ({ product,
             <Ionicons name="image-outline" size={28} color="#8c9aa5" />
           </View>
         )}
-        <TouchableOpacity style={styles.addButton} onPress={handleAdd} activeOpacity={0.7}>
-          <Ionicons name="add" size={18} color="#0cb055" />
-        </TouchableOpacity>
       </View>
 
       <View style={styles.badgesRow}>
@@ -203,19 +192,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#f5f8fb',
-  },
-  addButton: {
-    position: 'absolute',
-    top: -6,
-    right: -6,
-    width: 28,
-    height: 28,
-    borderRadius: 16,
-    borderWidth: 2,
-    borderColor: '#0cb055',
-    backgroundColor: '#ffffff',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   badgesRow: {
     flexDirection: 'row',

@@ -135,23 +135,36 @@ Este documento describe los diferentes endpoints de búsqueda y cuándo se utili
 
 ```typescript
 // HomeScreen.tsx
-const handleQuickSearch = async (item: QuickSearchItem) => {
-  // Llama a quick_search
-  const response = await fetch(`${getQuickSearchEndpoint()}?q=${item.query}`);
-  const prefetchedGroups = normalizeQuickSearchResponse(payload);
-  
+const navigateToSearch = (params: Record<string, any> = {}) => {
   navigation.navigate('Search', {
+    searchTrigger: Date.now(), // fuerza a SearchScreen a limpiar estado y ejecutar la nueva query
+    ...params,
+  });
+};
+
+const handleQuickSearch = async (item: QuickSearchItem) => {
+  const response = await fetch(`${getQuickSearchEndpoint()}?q=${encodeURIComponent(item.query)}`);
+  const payload = await response.json();
+  const prefetchedGroups = normalizeQuickSearchResponse(payload);
+
+  if (prefetchedGroups.length === 0) {
+    navigateToSearch({ initialQuery: item.query });
+    return;
+  }
+
+  navigateToSearch({
     initialQuery: item.query,
     prefetchedGroups,
-    fromQuickSearch: true
+    quickSearchMeta: { category: item.label, source: 'quick_search' },
+    fromQuickSearch: true,
   });
 };
 
 // PopularProducts.tsx
 const handleSelectProduct = (product: GroupedProduct) => {
-  navigation.navigate('Search', { 
+  navigateToSearch({
     initialQuery: product.display_name,
-    fromPopularProducts: true 
+    fromPopularProducts: true,
   });
 };
 ```
@@ -161,27 +174,65 @@ const handleSelectProduct = (product: GroupedProduct) => {
 ```typescript
 // SearchScreen.tsx
 React.useEffect(() => {
-  // Procesar prefetchedGroups PRIMERO
-  if (prefetchedGroups && prefetchedGroups.length > 0) {
-    setGroupedProducts(prefetchedGroups);
-    return; // NO ejecutar búsqueda automática
+  if (
+    route?.params?.prefetchedGroups &&
+    Array.isArray(route.params.prefetchedGroups) &&
+    route.params.prefetchedGroups.length > 0
+  ) {
+    // Solo precargar el input; la ejecución la hará el efecto de searchTrigger
+    setSearchQuery(route.params.initialQuery ?? '');
   }
-}, [prefetchedGroups]);
+}, [route?.params?.initialQuery, route?.params?.prefetchedGroups]);
 
-const executeSearchWithQuery = async (query: string) => {
-  // Bloquear si hay prefetchedGroups
-  if (route?.params?.prefetchedGroups?.length > 0) return;
-  if (hasPrefetchedData) return;
-  
-  // Si viene de productos populares, usar search-popular-products
-  if (route?.params?.fromPopularProducts) {
-    await n8nMcpService.searchPopularProducts(query);
+React.useEffect(() => {
+  const trigger = route?.params?.searchTrigger;
+  if (!trigger || trigger === lastSearchTrigger) {
     return;
   }
-  
-  // Búsqueda manual normal
-  // ...
-};
+
+  setLastSearchTrigger(trigger);
+
+  const incomingQuery = route?.params?.initialQuery || '';
+  const hasPrefetchedGroups =
+    route?.params?.prefetchedGroups &&
+    Array.isArray(route.params.prefetchedGroups) &&
+    route.params.prefetchedGroups.length > 0;
+
+  resetSearchState(); // limpia groupedProducts, filtros, flags y loaders
+  setSearchQuery(incomingQuery);
+  setIsLoading(hasPrefetchedGroups ? false : incomingQuery.trim().length >= 2);
+
+  const run = async () => {
+    if (hasPrefetchedGroups) {
+      setGroupedProducts(route?.params?.prefetchedGroups || []);
+      setFilteredGroups(route?.params?.prefetchedGroups || []);
+      setHasPrefetchedData(true);
+      navigation.setParams({ searchTrigger: undefined, prefetchedGroups: undefined });
+      return;
+    }
+
+    if (incomingQuery.trim().length >= 2) {
+      if (route?.params?.fromPopularProducts) {
+        await n8nMcpService.searchPopularProducts(incomingQuery);
+      } else {
+        await executeSearchWithQuery(incomingQuery);
+      }
+    } else {
+      setIsLoading(false);
+    }
+
+    navigation.setParams({ searchTrigger: undefined });
+  };
+
+  run();
+}, [
+  route?.params?.searchTrigger,
+  route?.params?.initialQuery,
+  route?.params?.prefetchedGroups,
+  route?.params?.fromPopularProducts,
+  navigation,
+  lastSearchTrigger,
+]);
 ```
 
 ---
@@ -194,7 +245,7 @@ const executeSearchWithQuery = async (query: string) => {
 
 3. **Normalización**: La función `normalizeQuickSearchResponse` en `HomeScreen.tsx` maneja múltiples formatos de respuesta de n8n.
 
-4. **Limpieza de input**: Cuando el usuario viene de una búsqueda rápida y empieza a escribir, el input se limpia automáticamente.
+4. **Sincronización con Search**: Toda navegación debe enviar `searchTrigger` + `initialQuery` (y `prefetchedGroups` si aplica) para que SearchScreen limpie resultados previos, reemplace el texto del input y ejecute la nueva búsqueda automáticamente.
 
 ---
 

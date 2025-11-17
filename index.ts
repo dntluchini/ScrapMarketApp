@@ -1,3 +1,6 @@
+// ⚠️ CRÍTICO: react-native-gesture-handler debe ser la primera importación
+// Es necesario para que funcionen los toques en React Navigation
+import 'react-native-gesture-handler';
 import { registerRootComponent } from 'expo';
 
 import App from './App';

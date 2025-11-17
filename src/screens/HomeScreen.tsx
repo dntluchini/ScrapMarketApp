@@ -4,12 +4,12 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  TouchableOpacity,
   Alert,
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { TouchableOpacity } from 'react-native-gesture-handler';
 import PopularProducts from '../components/PopularProducts';
 import { n8nMcpService } from '../services/n8nMcpService';
 
@@ -23,6 +23,7 @@ type QuickSearchItem = {
   query: string;
   color: string;
   iconSet?: 'ion' | 'mci';
+  iconSize?: number;
 };
 
 // Usar la misma base URL que n8nMcpService para mantener consistencia
@@ -32,19 +33,68 @@ const getQuickSearchEndpoint = (): string => {
 };
 
 const QUICK_SEARCH_ITEMS: QuickSearchItem[] = [
-  { icon: 'broom', label: 'Limpieza', query: 'limpieza', color: '#0ea5e9', iconSet: 'mci' },
-  { icon: 'leaf-outline', label: 'Vegetales', query: 'vegetales', color: '#22c55e', iconSet: 'ion' },
-  { icon: 'food-steak', label: 'Carnes', query: 'carnes', color: '#ef4444', iconSet: 'mci' },
-  { icon: 'wine-outline', label: 'Bebidas', query: 'bebidas', color: '#f97316', iconSet: 'ion' },
-  { icon: 'cow', label: 'L\u00E1cteos', query: 'l\u00E1cteos', color: '#8b5cf6', iconSet: 'mci' },
-  { icon: 'baguette', label: 'Panader\u00EDa', query: 'panader\u00EDa', color: '#facc15', iconSet: 'mci' },
+  {
+    icon: 'spray-bottle',
+    label: 'Limpieza',
+    query: 'limpieza',
+    color: '#0ea5e9',
+    iconSet: 'mci',
+    iconSize: 28,
+  },
+  {
+    icon: 'food-apple',
+    label: 'Vegetales',
+    query: 'vegetales',
+    color: '#22c55e',
+    iconSet: 'mci',
+    iconSize: 28,
+  },
+  {
+    icon: 'cow',
+    label: 'Carnes',
+    query: 'carnes',
+    color: '#ef4444',
+    iconSet: 'mci',
+    iconSize: 30,
+  },
+  {
+    icon: 'beer-outline',
+    label: 'Bebidas',
+    query: 'bebidas',
+    color: '#f97316',
+    iconSet: 'ion',
+    iconSize: 26,
+  },
+  {
+    icon: 'ice-cream',
+    label: 'Lácteos',
+    query: 'lácteos',
+    color: '#8b5cf6',
+    iconSet: 'mci',
+    iconSize: 26,
+  },
+  {
+    icon: 'bread-slice',
+    label: 'Panadería',
+    query: 'panadería',
+    color: '#facc15',
+    iconSet: 'mci',
+    iconSize: 28,
+  },
 ];
 
 const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const [quickSearchLoading, setQuickSearchLoading] = useState<string | null>(null);
 
+  const navigateToSearch = (params: Record<string, any> = {}) => {
+    navigation.navigate('Search', {
+      searchTrigger: Date.now(),
+      ...params,
+    });
+  };
+
   const handleProductSelect = (query: string) => {
-    navigation.navigate('Search', { initialQuery: query, fromPopularProducts: true });
+    navigateToSearch({ initialQuery: query, fromPopularProducts: true });
   };
 
   const normalizeQuickSearchResponse = (payload: any): any[] => {
@@ -255,13 +305,13 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
       
       if (prefetchedGroups.length === 0) {
         console.warn('⚠️ [HomeScreen] No groups normalized, falling back to regular search');
-        navigation.navigate('Search', { initialQuery: item.query });
+        navigateToSearch({ initialQuery: item.query });
         return;
       }
       
       const targetQuery = item.query;
 
-      navigation.navigate('Search', {
+      navigateToSearch({
         initialQuery: targetQuery,
         prefetchedGroups,
         quickSearchMeta: { category: item.label, source: 'quick_search' },
@@ -273,39 +323,43 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         'No se pudo cargar',
         'Intentaremos abrir la búsqueda tradicional para esta categoría.'
       );
-      navigation.navigate('Search', { initialQuery: item.query });
+      navigateToSearch({ initialQuery: item.query });
     } finally {
       setQuickSearchLoading(null);
     }
   };
 
-  const renderQuickSearchItem = (item: QuickSearchItem) => (
-    <TouchableOpacity
-      key={item.query}
-      style={[
-        styles.quickSearchItem,
-        quickSearchLoading === item.query && styles.quickSearchItemLoading,
-      ]}
-      onPress={() => handleQuickSearch(item)}
-      disabled={quickSearchLoading === item.query}
-    >
-      <View style={styles.quickSearchIcon}>
-        {quickSearchLoading === item.query ? (
-          <ActivityIndicator size="small" color={item.color} />
-        ) : (
-          item.iconSet === 'mci' ? (
-            <MaterialCommunityIcons name={item.icon as any} size={24} color={item.color} />
+const renderQuickSearchItem = (item: QuickSearchItem) => {
+    const IconComponent = item.iconSet === 'ion' ? Ionicons : MaterialCommunityIcons;
+    const iconSize = item.iconSize ?? 26;
+
+    return (
+      <TouchableOpacity
+        key={item.query}
+        style={[
+          styles.quickSearchItem,
+          quickSearchLoading === item.query && styles.quickSearchItemLoading,
+        ]}
+        onPress={() => handleQuickSearch(item)}
+        disabled={quickSearchLoading === item.query}
+        activeOpacity={0.75}
+        hitSlop={{ top: 5, bottom: 5, left: 5, right: 5 }}
+        delayPressIn={0}
+      >
+        <View style={styles.quickSearchIcon}>
+          {quickSearchLoading === item.query ? (
+            <ActivityIndicator size="small" color={item.color} />
           ) : (
-            <Ionicons name={item.icon as keyof typeof Ionicons.glyphMap} size={24} color={item.color} />
-          )
-        )}
-      </View>
-      <Text style={styles.quickSearchLabel}>{item.label}</Text>
-    </TouchableOpacity>
-  );
+            <IconComponent name={item.icon as any} size={iconSize} color={item.color} />
+          )}
+        </View>
+        <Text style={styles.quickSearchLabel}>{item.label}</Text>
+      </TouchableOpacity>
+    );
+  };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['left', 'right']}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <View>
@@ -317,7 +371,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
 
         <TouchableOpacity
           style={styles.searchButton}
-          onPress={() => navigation.navigate('Search')}
+          onPress={() => navigateToSearch()}
         >
           <Ionicons name="search" size={20} color="#6c757d" />
           <Text style={styles.searchButtonText}>Buscar productos...</Text>
@@ -425,9 +479,11 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     paddingHorizontal: 16,
     justifyContent: 'space-between',
+    rowGap: 12,
   },
   quickSearchItem: {
     width: '31%',
+    minWidth: 100,
     backgroundColor: '#fff',
     borderRadius: 12,
     padding: 16,
@@ -440,6 +496,12 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   quickSearchIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: '#f2f4f8',
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 8,
   },
   quickSearchLabel: {

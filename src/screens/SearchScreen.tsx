@@ -15,6 +15,14 @@ interface SearchScreenProps {
   route?: any;
 }
 
+// Helper function to ensure stock is always a boolean
+const ensureBoolean = (value: any): boolean => {
+  if (typeof value === 'boolean') return value;
+  if (value === 'true' || value === true) return true;
+  if (value === 'false' || value === false) return false;
+  return true; // default to true if undefined/null
+};
+
 const resolveImageUrl = (payload: any): string | undefined => {
   if (!payload || typeof payload !== 'object') {
     return undefined;
@@ -123,8 +131,8 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route }) => {
   }, [isScraping, scrapingStartTime]);
 
   const [hasPrefetchedData, setHasPrefetchedData] = useState(false);
+  const [lastSearchTrigger, setLastSearchTrigger] = useState<number | null>(null);
 
-  // ⭐ PRIORITARIO: Procesar prefetchedGroups PRIMERO (viene de quick_search)
   React.useEffect(() => {
     const prefetched = route?.params?.prefetchedGroups;
     if (prefetched && Array.isArray(prefetched) && prefetched.length > 0) {
@@ -134,29 +142,27 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route }) => {
       setProducts([]);
       setScrapedProducts([]);
       setIsLoading(false);
-      setHasPrefetchedData(true); // Marcar que hay datos prefetched
-      // Limpiar el parámetro después de procesarlo
+      setHasPrefetchedData(true);
       navigation.setParams({ prefetchedGroups: undefined });
       console.log('✅ prefetchedGroups processed, will NOT execute search-in-db');
     }
   }, [route?.params?.prefetchedGroups, navigation]);
 
-  // ⭐ Ejecutar búsqueda automática SOLO si NO hay prefetchedGroups
   React.useEffect(() => {
-    // Si hay prefetchedGroups, NO ejecutar búsqueda automática
-    if (route?.params?.prefetchedGroups && Array.isArray(route.params.prefetchedGroups) && route.params.prefetchedGroups.length > 0) {
+    if (
+      route?.params?.prefetchedGroups &&
+      Array.isArray(route.params.prefetchedGroups) &&
+      route.params.prefetchedGroups.length > 0
+    ) {
       console.log('📦 Has prefetchedGroups, skipping automatic search execution');
       return;
     }
-    
-    if (route?.params?.initialQuery) {
-      const query = route.params.initialQuery;
+
+    const query = route?.params?.initialQuery;
+    if (query) {
       setSearchQuery(query);
-      // Ejecutar búsqueda automáticamente cuando hay initialQuery (solo si NO hay prefetchedGroups)
-      if (query && query.trim().length >= 2) {
-        // Usar setTimeout para asegurar que el estado se actualice antes de buscar
+      if (query.trim().length >= 2) {
         const timeoutId = setTimeout(() => {
-          // Ejecutar búsqueda directamente con el query
           executeSearchWithQuery(query);
         }, 200);
         return () => clearTimeout(timeoutId);
@@ -164,6 +170,59 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route }) => {
     }
   }, [route?.params?.initialQuery, route?.params?.prefetchedGroups]);
 
+  React.useEffect(() => {
+    const trigger = route?.params?.searchTrigger;
+    if (!trigger || trigger === lastSearchTrigger) {
+      return;
+    }
+
+    setLastSearchTrigger(trigger);
+
+    const incomingQuery = route?.params?.initialQuery || '';
+    const hasPrefetchedGroups =
+      route?.params?.prefetchedGroups &&
+      Array.isArray(route.params.prefetchedGroups) &&
+      route.params.prefetchedGroups.length > 0;
+
+    setGroupedProducts([]);
+    setFilteredGroups([]);
+    setProducts([]);
+    setScrapedProducts([]);
+    setHasPrefetchedData(false);
+    setShowSaveButton(false);
+    setNeedsDbSave(false);
+    setIsSearching(false);
+    setIsLoading(hasPrefetchedGroups ? false : !!incomingQuery);
+    setSearchQuery(incomingQuery);
+
+    const run = async () => {
+      if (hasPrefetchedGroups) {
+        setGroupedProducts(route?.params?.prefetchedGroups || []);
+        setFilteredGroups(route?.params?.prefetchedGroups || []);
+        setHasPrefetchedData(true);
+        navigation.setParams({ searchTrigger: undefined, prefetchedGroups: undefined });
+        return;
+      }
+
+      if (incomingQuery.trim().length >= 2) {
+        await executeSearchWithQuery(incomingQuery);
+      } else {
+        setIsLoading(false);
+      }
+
+      navigation.setParams({ searchTrigger: undefined });
+    };
+
+    run();
+  }, [
+    route?.params?.searchTrigger,
+    route?.params?.initialQuery,
+    route?.params?.prefetchedGroups,
+    navigation,
+    lastSearchTrigger,
+  ]);
+
+  // ⭐ PRIORITARIO: Procesar prefetchedGroups PRIMERO (viene de quick_search)
   // ⭐ Limpiar input cuando el usuario empieza a escribir después de una búsqueda rápida
   const handleSearchQueryChange = (text: string) => {
     // Si hay datos prefetched y el usuario empieza a escribir, limpiar el input
@@ -173,7 +232,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route }) => {
         setHasPrefetchedData(false);
         setGroupedProducts([]);
         setFilteredGroups([]);
-      }
+    }
     }
     setSearchQuery(text);
   };
@@ -296,7 +355,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route }) => {
     setIsRefreshing(false);
   };
 
-  const handleSearch = async () => {
+const handleSearch = async () => {
     console.log('🔍 SearchScreen handleSearch called with query:', searchQuery);
     console.log('🔍 User explicitly pressed search button');
     
@@ -312,7 +371,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route }) => {
   };
 
   // Función interna para ejecutar búsqueda con un query específico
-  const executeSearchWithQuery = async (queryToSearch: string) => {
+const executeSearchWithQuery = async (queryToSearch: string) => {
     console.log('🔍 SearchScreen executeSearchWithQuery called with query:', queryToSearch);
     
     // ⭐ NO ejecutar si hay prefetchedGroups (viene de quick_search)
@@ -453,7 +512,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route }) => {
           }
           // ⭐ NUEVO: Verificar si tiene data array con productos ya agrupados (formato directo)
           else if ((dbResponse.status === 'success' || dbResponse.status === 'found') && Array.isArray(dbResponse.data)) {
-            productsData = dbResponse.data;
+          productsData = dbResponse.data;
             console.log('✅ Found products in database via search-in-db (format 1b - direct object with data):', productsData.length);
             // Verificar si el primer item tiene supermarkets (ya agrupado)
             if (productsData.length > 0 && productsData[0] && productsData[0].supermarkets && Array.isArray(productsData[0].supermarkets)) {
@@ -643,8 +702,8 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route }) => {
           }
           // Caso: estructura { data: [...] }
           else if (Array.isArray(productsData.data)) {
-            console.log('🔍 Extracting nested data array:', productsData.data.length, 'products');
-            productsData = productsData.data;
+          console.log('🔍 Extracting nested data array:', productsData.data.length, 'products');
+          productsData = productsData.data;
             // Verificar si los productos ya están agrupados
             if (productsData.length > 0 && productsData[0] && productsData[0].supermarkets && Array.isArray(productsData[0].supermarkets)) {
               console.log('✅ Products are already grouped (have supermarkets array)');
@@ -919,7 +978,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route }) => {
               supermercado: supermarket.super || 'unknown',
               ean: item.ean || 'NO_EAN',
               exact_weight: item.exact_weight || 'UNKNOWN',
-              stock: supermarket.stock !== undefined ? Boolean(supermarket.stock) : true,
+              stock: ensureBoolean(supermarket.stock),
               url: supermarket.url || '',
               sku: '',
               skuRef: '',
@@ -1401,7 +1460,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route }) => {
         ListEmptyComponent={
           showEmptyState ? (
             <View style={styles.emptyState}>
-              <Ionicons name="search" size="48" color="#ccc" />
+              <Ionicons name="search" size={48} color="#ccc" />
               <Text style={styles.emptyStateText}>
                 {connectionStatus === 'disconnected' 
                   ? 'Sin conexi??n a n8n. Verifica tu configuraci??n.'
@@ -1426,6 +1485,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route }) => {
     </View>
   );
 };
+
 
 const styles = StyleSheet.create({
   container: {
@@ -1646,5 +1706,3 @@ const styles = StyleSheet.create({
 });
 
 export default SearchScreen;
-
-

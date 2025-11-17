@@ -25,7 +25,8 @@ El sistema de carrito de compras permite a los usuarios:
 - ✅ Ver el carrito agrupado por supermercado
 - ✅ Redirigir directamente a la web del supermercado con la cantidad correcta
 - ✅ Visualizar el total de productos en un badge animado
-- ✅ Confirmar acciones con modales personalizados
+- ✅ Confirmar acciones destructivas con modales personalizados y manejar altas de forma inline sin fricción
+- ✅ Agregar productos desde Search y desde el modal de populares con cantidades sincronizadas al `cartService`
 
 ---
 
@@ -173,11 +174,19 @@ const animateBadge = () => {
 **Responsabilidad:** Card de producto con integración al carrito
 
 **Características:**
-- ✅ Botón "+" para agregar (cuando no está en carrito)
-- ✅ Controles +/- y cantidad (cuando está en carrito)
-- ✅ Modal de confirmación antes de agregar
-- ✅ Modal de éxito después de agregar
-- ✅ Capitalización correcta de nombres
+- ✅ Botón "+" que se desactiva y muestra spinner mientras `cartService.addToCart` procesa la primera adición
+- ✅ Controles +/- inline con sincronización inmediata del contador cuando el producto ya está en el carrito
+- ✅ Preserva `addToCartLink` y metadatos por supermercado al reutilizar `cartService`
+- ✅ Logs verbosos para depurar integraciones con VTEX/Supabase
+
+### 6. **Modal de Productos Populares** (`src/components/PopularProducts.tsx`)
+**Responsabilidad:** Mostrar detalles rápidos y acciones por supermercado al tocar una tarjeta destacada.
+
+**Características:**
+- ✅ Al tocar una tarjeta se abre un modal con `selectedProduct` y la lista de supermercados disponibles.
+- ✅ Cada supermercado reutiliza los mismos controles de cantidad (+/-) inline y botones "Agregar al carrito" conectados al `cartService`.
+- ✅ El botón “Ver resultados” cierra el modal y navega a Search con el contexto correcto (`searchTrigger`) para ejecutar la búsqueda automáticamente.
+- ✅ Indicadores visuales por supermercado (precio, stock, tiempo de actualización) sincronizados con caché predictivo.
 
 ---
 
@@ -188,22 +197,14 @@ const animateBadge = () => {
 ```
 1. Usuario presiona "+" en SupermarketItem
    ↓
-2. Se muestra Modal de confirmación
+2. cartService.addToCart(product, 1) se ejecuta y el botón muestra spinner
    ↓
-3. Usuario confirma
+3. notifyListeners() dispara el refresh del hook useCart
    ↓
-4. cartService.addToCart(product, quantity)
-   ↓
-5. Actualiza AsyncStorage (local)
-   ↓
-6. notifyListeners()
-   ↓
-7. useCart detecta cambio
-   ↓
-8. Actualiza UI (CartScreen, AnimatedCartBadge)
-   ↓
-9. Se muestra Modal de éxito
+4. CartScreen, AnimatedCartBadge y los controles +/- inline se actualizan con la nueva cantidad
 ```
+
+Para incrementos/decrementos subsecuentes, los botones +/- llaman a `cartService.addToCart` o `cartService.updateQuantity` sin bloquear la UI, manteniendo la cantidad en sincronía sin necesidad de modales.
 
 ### Agregar al Carrito del Supermercado
 

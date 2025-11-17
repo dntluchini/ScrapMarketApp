@@ -17,7 +17,9 @@ ScrapMarket App es una aplicación móvil multiplataforma que compara precios en
 - 🔄 Rotación semántica de productos populares más un caché predictivo programado manejado por n8n.
 - 📱 UX mobile-first: skeleton loading, pull-to-refresh, renderizado progresivo, modales personalizados.
 - 🎨 **Badge animado del carrito** con efecto bounce y actualizaciones en tiempo real vía patrón observer.
-- 🔒 Capa de datos robusta con logging estructurado y error boundaries protectores.
+- 🔒 Capa de datos robusta con logging estructurado y controles consistentes de errores en servicios.
+- 🧭 Acciones en Home (barra de búsqueda, chips y populares) limpian cualquier query previa, inyectan la nueva y disparan la búsqueda automáticamente en iOS, Android y web.
+- 🧺 Modal de productos populares con cantidades por supermercado y botones de “Agregar al carrito” que reutilizan el mismo flujo de `cartService`.
 
 Más detalles técnicos (servicios, agentes, workflows) están en [`context.json`](context.json) y la carpeta [`docs/`](docs/).
 
@@ -38,9 +40,8 @@ Más detalles técnicos (servicios, agentes, workflows) están en [`context.json
 
 1. **Requisitos previos**: Node 18+, npm, Expo CLI, Docker (para n8n), cuenta de Supabase.
 2. **Instalación**
+   Desde la carpeta raíz del proyecto:
    ```bash
-   git clone https://github.com/dntluchini/ScrapMarketApp.git
-   cd ScrapMarketApp
    npm install
    ```
 3. **Configuración de ambiente**

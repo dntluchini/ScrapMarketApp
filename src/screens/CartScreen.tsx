@@ -353,7 +353,7 @@ export default function CartScreen({ navigation }: any) {
 
   if (cart.items.length === 0) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
         <View style={styles.emptyContainer}>
           <Ionicons name="cart-outline" size={80} color="#cbd5e1" />
           <Text style={styles.emptyTitle}>Tu carrito está vacío</Text>
@@ -366,7 +366,7 @@ export default function CartScreen({ navigation }: any) {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
         <View style={styles.headerInfo}>
           <Text style={styles.headerTitle}>Carrito de Compras</Text>

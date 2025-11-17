@@ -1,5 +1,6 @@
 ﻿import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Animated, Modal, ScrollView, Linking, Alert, AppState } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, Animated, Modal, ScrollView, Linking, Alert, AppState } from 'react-native';
+import { TouchableOpacity } from 'react-native-gesture-handler';
 import { useIsFocused } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { GroupedProduct, Product, productGroupingService } from '../services/productGroupingService';
@@ -7,6 +8,7 @@ import PopularProductCard from './PopularProductCard';
 import { n8nMcpService } from '../services/n8nMcpService';
 import { ProductHeader } from './ProductCard/ProductHeader';
 import { formatPrice } from '../utils/productNameUtils';
+import { cartService } from '../services/cartService';
 
 interface PopularProductsProps {
   onProductSelect?: (query: string) => void;
@@ -275,7 +277,23 @@ const PopularProducts: React.FC<PopularProductsProps> = ({ onProductSelect }) =>
   const animationFrameRef = useRef<number | null>(null);
   const autoScrollOffsetRef = useRef(0);
   const [selectedProduct, setSelectedProduct] = useState<GroupedProduct | null>(null);
+  const [addingSupermarket, setAddingSupermarket] = useState<string | null>(null);
+  const [supermarketQuantities, setSupermarketQuantities] = useState<Record<string, number>>({});
   const isFocused = useIsFocused();
+
+  useEffect(() => {
+    if (!selectedProduct) {
+      setSupermarketQuantities({});
+      return;
+    }
+
+    const next: Record<string, number> = {};
+    selectedProduct.products.forEach((product, index) => {
+      const key = `${selectedProduct.ean}-${product.supermercado}-${index}`;
+      next[key] = supermarketQuantities[key] ?? 1;
+    });
+    setSupermarketQuantities(next);
+  }, [selectedProduct]);
 
   const loadPopularProducts = useCallback(async () => {
     setIsLoading(true);
@@ -486,18 +504,59 @@ const PopularProducts: React.FC<PopularProductsProps> = ({ onProductSelect }) =>
     }
   }, [isFocused, carouselData.length, startCarouselAnimation]);
 
-  const handleSelectProduct = async (product: GroupedProduct) => {
-    // Obtener el nombre del producto para la búsqueda
-    const searchQuery = product.display_name || product.canonname || '';
-    if (!searchQuery) return;
-
-    // Navegar directamente a la búsqueda - el SearchScreen se encargará de llamar al endpoint
-    if (onProductSelect) {
-      onProductSelect(searchQuery);
-    }
+  const handleSelectProduct = (product: GroupedProduct) => {
+    setSelectedProduct(product);
   };
 
   const closeModal = () => setSelectedProduct(null);
+
+  const handleOpenInSearch = () => {
+    if (!selectedProduct || !onProductSelect) {
+      return;
+    }
+
+    const searchQuery =
+      selectedProduct.display_name || selectedProduct.canonname || '';
+    if (!searchQuery) {
+      return;
+    }
+
+    onProductSelect(searchQuery);
+    setSelectedProduct(null);
+  };
+
+  const handleQuantityChange = (key: string, delta: number) => {
+    setSupermarketQuantities(prev => {
+      const current = prev[key] ?? 1;
+      const next = Math.max(1, current + delta);
+      return { ...prev, [key]: next };
+    });
+  };
+
+  const handleAddProductToCart = async (product: Product, key: string) => {
+    if (!product.addToCartLink) {
+      Alert.alert(
+        'Sin enlace',
+        'Este supermercado no tiene un enlace directo para agregar al carrito.'
+      );
+      return;
+    }
+
+    try {
+      setAddingSupermarket(key);
+      const quantity = supermarketQuantities[key] ?? 1;
+      await cartService.addToCart(product, quantity);
+      Alert.alert(
+        'Agregado al carrito',
+        `${product.canonname || product.canonid || 'Producto'} (${product.supermercado}) agregado al carrito.`
+      );
+    } catch (error) {
+      console.error('Error adding product to cart:', error);
+      Alert.alert('Error', 'No se pudo agregar el producto al carrito.');
+    } finally {
+      setAddingSupermarket(null);
+    }
+  };
 
   const getLastUpdateText = (): string => {
     if (!lastUpdate) return '';
@@ -605,6 +664,10 @@ const PopularProducts: React.FC<PopularProductsProps> = ({ onProductSelect }) =>
                     const name = productItem.supermercado
                       ? productItem.supermercado.replace(/\b\w/g, (c: string) => c.toUpperCase())
                       : 'Sin nombre';
+                    const rowKey = `${selectedProduct.ean}-${productItem.supermercado}-${index}`;
+                    const isAdding = addingSupermarket === rowKey;
+                    const canAdd = !!productItem.addToCartLink;
+                    const quantity = supermarketQuantities[rowKey] ?? 1;
 
                     const openLink = async () => {
                       if (!productItem.url) {
@@ -632,14 +695,45 @@ const PopularProducts: React.FC<PopularProductsProps> = ({ onProductSelect }) =>
                           <Text style={styles.supermarketRowPrice}>{formatPrice(productItem.precio)}</Text>
                         </View>
                         <View style={styles.supermarketActions}>
-                          <Text
-                            style={[
-                              styles.supermarketRowStock,
-                              { color: productItem.stock ? '#10B981' : '#EF4444' },
-                            ]}
-                          >
-                            {productItem.stock ? 'En stock' : 'Sin stock'}
-                          </Text>
+                          <View style={styles.stockRow}>
+                            <Text
+                              style={[
+                                styles.supermarketRowStock,
+                                { color: productItem.stock ? '#10B981' : '#EF4444' },
+                              ]}
+                            >
+                              {productItem.stock ? 'En stock' : 'Sin stock'}
+                            </Text>
+                            <View style={styles.quantityControls}>
+                              <TouchableOpacity
+                                style={styles.quantityButton}
+                                onPress={() => handleQuantityChange(rowKey, -1)}
+                              >
+                                <Ionicons name="remove" size={16} color="#007bff" />
+                              </TouchableOpacity>
+                              <Text style={styles.quantityText}>{quantity}</Text>
+                              <TouchableOpacity
+                                style={styles.quantityButton}
+                                onPress={() => handleQuantityChange(rowKey, 1)}
+                              >
+                                <Ionicons name="add" size={16} color="#007bff" />
+                              </TouchableOpacity>
+                            </View>
+                            <TouchableOpacity
+                              style={[
+                                styles.addButton,
+                                (!canAdd || isAdding) && styles.addButtonDisabled,
+                              ]}
+                              onPress={() => handleAddProductToCart(productItem, rowKey)}
+                              disabled={!canAdd || isAdding}
+                            >
+                              {isAdding ? (
+                                <ActivityIndicator size="small" color="#007bff" />
+                              ) : (
+                                <Ionicons name="cart-outline" size={18} color="#007bff" />
+                              )}
+                            </TouchableOpacity>
+                          </View>
                           {productItem.url ? (
                             <TouchableOpacity style={styles.linkButton} onPress={openLink}>
                               <Text style={styles.linkButtonText}>Ver producto</Text>
@@ -651,16 +745,17 @@ const PopularProducts: React.FC<PopularProductsProps> = ({ onProductSelect }) =>
                   })}
                 </View>
 
-                <View style={styles.modalButtonRow}>
-                  <TouchableOpacity style={styles.secondaryButton}>
-                    <Ionicons name="notifications-outline" size={16} color="#007bff" />
-                    <Text style={styles.secondaryButtonText}>Crear alerta</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.secondaryButton}>
-                    <Ionicons name="time-outline" size={16} color="#007bff" />
-                    <Text style={styles.secondaryButtonText}>Ver historial</Text>
-                  </TouchableOpacity>
-                </View>
+                {onProductSelect ? (
+                  <View style={styles.modalButtonRow}>
+                    <TouchableOpacity
+                      style={styles.secondaryButton}
+                      onPress={handleOpenInSearch}
+                    >
+                      <Ionicons name="search-outline" size={16} color="#007bff" />
+                      <Text style={styles.secondaryButtonText}>Ver resultados</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : null}
               </ScrollView>
             )}
           </View>
@@ -801,6 +896,13 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     gap: 6,
   },
+  stockRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+    gap: 12,
+  },
   supermarketRowName: {
     fontSize: 14,
     fontWeight: '600',
@@ -829,23 +931,59 @@ const styles = StyleSheet.create({
   },
   modalButtonRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
+    justifyContent: 'center',
+    marginTop: 12,
   },
   secondaryButton: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#007bff',
+    backgroundColor: '#ffffff',
   },
   secondaryButtonText: {
     color: '#007bff',
     fontWeight: '600',
     marginLeft: 6,
+    fontSize: 15,
+  },
+  quantityControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 999,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    backgroundColor: '#f8fafc',
+  },
+  quantityButton: {
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+  },
+  quantityText: {
+    minWidth: 24,
+    textAlign: 'center',
+    fontWeight: '600',
+    color: '#111827',
+    marginHorizontal: 4,
+  },
+  addButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#007bff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#E6F0FF',
+  },
+  addButtonDisabled: {
+    opacity: 0.6,
   },
 });
 

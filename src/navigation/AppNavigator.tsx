@@ -1,5 +1,5 @@
 import React from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -34,12 +34,22 @@ function CartScreenWithBadge(props: any) {
   return <CartScreen {...props} />;
 }
 
+const APP_BACKGROUND = '#f8f9fa';
+const AppTheme = {
+  ...DefaultTheme,
+  colors: {
+    ...DefaultTheme.colors,
+    background: APP_BACKGROUND,
+  },
+};
+
 // Main Tab Navigator
 function MainTabNavigator() {
   const { totalItems } = useCart();
   
   return (
     <Tab.Navigator
+      sceneContainerStyle={{ backgroundColor: APP_BACKGROUND }}
       screenOptions={({ route }) => ({
         tabBarIcon: ({ focused, color, size }) => {
           let iconName: keyof typeof Ionicons.glyphMap;
@@ -61,20 +71,34 @@ function MainTabNavigator() {
         tabBarActiveTintColor: '#007AFF',
         tabBarInactiveTintColor: 'gray',
         tabBarStyle: {
-          backgroundColor: 'white',
-          borderTopWidth: 1,
-          borderTopColor: '#E5E5E5',
-          paddingBottom: 5,
-          paddingTop: 5,
-          height: 60,
+          backgroundColor: '#ffffff',
+          borderTopWidth: 0,
+          borderTopColor: 'transparent',
+          paddingBottom: 6,
+          paddingTop: 6,
+          height: 64,
+          elevation: 0,
+          shadowOpacity: 0,
+          shadowOffset: { width: 0, height: 0 },
+          shadowRadius: 0,
         },
         headerStyle: {
           backgroundColor: '#007AFF',
+          borderBottomWidth: 0,
+          borderBottomColor: 'transparent',
+          elevation: 0,
+          shadowOpacity: 0,
+          shadowOffset: { width: 0, height: 0 },
+          shadowRadius: 0,
+          shadowColor: 'transparent',
         },
+        headerShadowVisible: false as boolean,
+        headerTransparent: false as boolean,
         headerTintColor: 'white',
         headerTitleStyle: {
-          fontWeight: 'bold',
+          fontWeight: 'bold' as const,
         },
+        headerBackTitleVisible: false as boolean,
       })}
     >
       <Tab.Screen 
@@ -82,7 +106,9 @@ function MainTabNavigator() {
         component={HomeScreen}
         options={{ 
           title: 'Inicio',
-          headerTitle: 'ScrapMarket'
+          headerTitle: 'ScrapMarket',
+          gestureEnabled: true,
+          animationEnabled: true,
         }}
       />
       <Tab.Screen 
@@ -90,7 +116,9 @@ function MainTabNavigator() {
         component={SearchScreen}
         options={{ 
           title: 'Buscar',
-          headerTitle: 'Buscar Productos'
+          headerTitle: 'Buscar Productos',
+          gestureEnabled: true,
+          animationEnabled: true,
         }}
       />
       <Tab.Screen 
@@ -101,6 +129,8 @@ function MainTabNavigator() {
           return {
             title: 'Carrito',
             headerTitle: 'Mi Carrito',
+            gestureEnabled: true,
+            animationEnabled: true,
             tabBarIcon: ({ focused, color, size }) => {
               const icon = (
                 <Ionicons 
@@ -119,7 +149,9 @@ function MainTabNavigator() {
         component={ProfileScreen}
         options={{ 
           title: 'Perfil',
-          headerTitle: 'Mi Perfil'
+          headerTitle: 'Mi Perfil',
+          gestureEnabled: true,
+          animationEnabled: true,
         }}
       />
     </Tab.Navigator>
@@ -129,22 +161,31 @@ function MainTabNavigator() {
 // Root Stack Navigator
 export default function AppNavigator() {
   return (
-    <NavigationContainer>
+    <NavigationContainer theme={AppTheme}>
       <Stack.Navigator
         screenOptions={{
           headerStyle: {
             backgroundColor: '#007AFF',
+            borderBottomWidth: 0,
+            borderBottomColor: 'transparent',
+            elevation: 0,
+            shadowOpacity: 0,
+            shadowOffset: { width: 0, height: 0 },
+            shadowRadius: 0,
+            shadowColor: 'transparent',
           },
+          headerShadowVisible: false as boolean,
+          headerTransparent: false as boolean,
           headerTintColor: 'white',
           headerTitleStyle: {
-            fontWeight: 'bold',
+            fontWeight: 'bold' as const,
           },
         }}
       >
         <Stack.Screen 
           name="MainTabs" 
           component={MainTabNavigator}
-          options={{ headerShown: false }}
+          options={{ headerShown: false as boolean }}
         />
         <Stack.Screen 
           name="ProductDetails" 
@@ -152,6 +193,8 @@ export default function AppNavigator() {
           options={({ route }) => ({
             title: route.params?.productName || 'Detalles del Producto',
             headerBackTitle: 'Atrás',
+            gestureEnabled: true,
+            animationEnabled: true,
           })}
         />
       </Stack.Navigator>
