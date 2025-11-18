@@ -27,15 +27,15 @@ export const SupermarketItem = React.memo<SupermarketItemProps>(({ item, onPress
     });
   }, [item]);
   
-  const [isInCart, setIsInCart] = useState(cartService.isInCart(item.canonid, item.supermercado));
-  const [cartQuantity, setCartQuantity] = useState(cartService.getProductQuantity(item.canonid, item.supermercado));
+  const [isInCart, setIsInCart] = useState(cartService.isInCart(item));
+  const [cartQuantity, setCartQuantity] = useState(cartService.getProductQuantity(item));
   const [isProcessing, setIsProcessing] = useState(false);
 
   // Actualizar estado cuando cambie el carrito
   useEffect(() => {
     const checkCart = () => {
-      const inCart = cartService.isInCart(item.canonid, item.supermercado);
-      const quantity = cartService.getProductQuantity(item.canonid, item.supermercado);
+      const inCart = cartService.isInCart(item);
+      const quantity = cartService.getProductQuantity(item);
       setIsInCart(inCart);
       setCartQuantity(quantity);
     };
@@ -44,7 +44,7 @@ export const SupermarketItem = React.memo<SupermarketItemProps>(({ item, onPress
     // Re-verificar periódicamente (podría mejorarse con un sistema de eventos)
     const interval = setInterval(checkCart, 1000);
     return () => clearInterval(interval);
-  }, [item.canonid, item.supermercado]);
+  }, [item]);
 
   const handleVerPress = async () => {
     if (!item.url) {
@@ -101,11 +101,11 @@ export const SupermarketItem = React.memo<SupermarketItemProps>(({ item, onPress
   const handleDecreaseQuantity = async () => {
     try {
       if (cartQuantity <= 1) {
-        await cartService.removeFromCart(item.canonid, item.supermercado);
+        await cartService.removeFromCart(item);
         setIsInCart(false);
         setCartQuantity(0);
       } else {
-        await cartService.updateQuantity(item.canonid, item.supermercado, cartQuantity - 1);
+        await cartService.updateQuantity(item, cartQuantity - 1);
         setCartQuantity(prev => prev - 1);
       }
       onCartUpdate?.();

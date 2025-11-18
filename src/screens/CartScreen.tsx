@@ -10,6 +10,7 @@ import {
   RefreshControl,
   Linking,
   Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -29,12 +30,13 @@ const capitalizeWords = (text: string): string =>
 export default function CartScreen({ navigation }: any) {
   const { cart, refreshCart } = useCart();
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [processingSupermarket, setProcessingSupermarket] = useState<string | null>(null);
   
   // Estados para modales de confirmación
   const [showRemoveItemModal, setShowRemoveItemModal] = useState(false);
   const [showClearSupermarketModal, setShowClearSupermarketModal] = useState(false);
   const [showClearAllModal, setShowClearAllModal] = useState(false);
-  const [itemToRemove, setItemToRemove] = useState<{ productId: string; supermarket: string } | null>(null);
+  const [itemToRemove, setItemToRemove] = useState<CartItem | null>(null);
   const [supermarketToClear, setSupermarketToClear] = useState<string | null>(null);
 
   // Actualizar carrito cuando la pantalla recibe foco
@@ -59,14 +61,14 @@ export default function CartScreen({ navigation }: any) {
     setIsRefreshing(false);
   }, [loadCart]);
 
-  const handleRemoveItem = useCallback((productId: string, supermarket: string) => {
-    setItemToRemove({ productId, supermarket });
+  const handleRemoveItem = useCallback((cartItem: CartItem) => {
+    setItemToRemove(cartItem);
     setShowRemoveItemModal(true);
   }, []);
 
   const confirmRemoveItem = useCallback(async () => {
     if (itemToRemove) {
-      await cartService.removeFromCart(itemToRemove.productId, itemToRemove.supermarket);
+      await cartService.removeFromCart(itemToRemove.product);
       loadCart();
       setShowRemoveItemModal(false);
       setItemToRemove(null);
@@ -74,8 +76,8 @@ export default function CartScreen({ navigation }: any) {
   }, [itemToRemove, loadCart]);
 
   const handleUpdateQuantity = useCallback(
-    async (productId: string, supermarket: string, newQuantity: number) => {
-      await cartService.updateQuantity(productId, supermarket, newQuantity);
+    async (cartItem: CartItem, newQuantity: number) => {
+      await cartService.updateQuantity(cartItem.product, newQuantity);
       loadCart();
     },
     [loadCart]
@@ -111,6 +113,70 @@ export default function CartScreen({ navigation }: any) {
     }
   };
 
+  const buildCombinedAddToCartLink = (items: CartItem[]): string | null => {
+    if (items.length === 0) return null;
+    try {
+      const links = items
+        .map(item => item.product.addToCartLink)
+        .filter((link): link is string => Boolean(link));
+      if (links.length !== items.length) {
+        return null;
+      }
+
+      const firstUrl = new URL(links[0]);
+      const samePath = links.every(link => {
+        const parsed = new URL(link);
+        return parsed.origin === firstUrl.origin && parsed.pathname === firstUrl.pathname;
+      });
+
+      if (!samePath) {
+        return null;
+      }
+
+      const combined = new URL(firstUrl.origin + firstUrl.pathname);
+
+      items.forEach(item => {
+        const link = item.product.addToCartLink!;
+        const parsed = new URL(link);
+        const params = parsed.searchParams;
+
+        const sku =
+          params.get('sku') ||
+          item.product.sku ||
+          item.product.skuRef ||
+          item.product.canonid ||
+          item.product.ean;
+
+        if (!sku) {
+          return;
+        }
+
+        const seller = params.get('seller') || '1';
+        const sc = params.get('sc') || params.get('salesChannel') || '1';
+        const cv = params.get('cv') || '_';
+        const price =
+          params.get('price') ||
+          (item.product.precio ? Math.round(item.product.precio * 100).toString() : '0');
+
+        combined.searchParams.append('sku', sku);
+        combined.searchParams.append('qty', String(item.quantity));
+        combined.searchParams.append('seller', seller);
+        combined.searchParams.append('sc', sc);
+        combined.searchParams.append('price', price);
+        combined.searchParams.append('cv', cv);
+      });
+
+      if (combined.searchParams.getAll('sku').length === 0) {
+        return null;
+      }
+
+      return combined.toString();
+    } catch (error) {
+      console.error('Error building combined addToCart link:', error);
+      return null;
+    }
+  };
+
   // Función para construir URL del carrito basándose en la URL del producto
   const buildCartUrl = (productUrl: string, supermarket: string): string | null => {
     if (!productUrl) return null;
@@ -142,109 +208,149 @@ export default function CartScreen({ navigation }: any) {
     }
   };
 
-  const handleAddToSupermarketCart = useCallback(async (supermarket: string, items: CartItem[]) => {
-    console.log('🛒 handleAddToSupermarketCart called for:', supermarket);
-    console.log('🛒 Items count:', items.length);
-    console.log('🛒 Items with addToCartLink:', items.filter(item => item.product.addToCartLink).length);
-    
-    // Buscar items con addToCartLink
-    const itemsWithLinks = items.filter(item => item.product.addToCartLink);
-    
-    // Log para debug
-    items.forEach((item, index) => {
-      console.log(`🛒 Item ${index}:`, {
-        name: item.product.canonname,
-        supermarket: item.product.supermercado,
-        hasAddToCartLink: !!item.product.addToCartLink,
-        addToCartLink: item.product.addToCartLink,
-        quantity: item.quantity,
-      });
-    });
-    
-    if (itemsWithLinks.length === 0) {
-      // Si no hay items con link, intentar construir la URL del carrito
-      const firstItem = items[0];
-      if (firstItem?.product.url) {
-        const cartUrl = buildCartUrl(firstItem.product.url, supermarket);
-        if (cartUrl) {
+  const handleAddToSupermarketCart = useCallback(
+    async (supermarket: string, items: CartItem[]) => {
+      if (processingSupermarket) {
+        if (processingSupermarket === supermarket) {
+          Alert.alert('Espera', 'Ya se están agregando los productos de este supermercado.');
+        } else {
+          Alert.alert(
+            'Espera',
+            `Estamos agregando productos de ${processingSupermarket}. Intenta nuevamente en unos segundos.`
+          );
+        }
+        return;
+      }
+
+      setProcessingSupermarket(supermarket);
+      try {
+        console.log('🛒 handleAddToSupermarketCart called for:', supermarket);
+        console.log('🛒 Items count:', items.length);
+        console.log('🛒 Items with addToCartLink:', items.filter(item => item.product.addToCartLink).length);
+
+        const itemsWithLinks = items.filter(item => item.product.addToCartLink);
+
+        items.forEach((item, index) => {
+          console.log(`🛒 Item ${index}:`, {
+            name: item.product.canonname,
+            supermarket: item.product.supermercado,
+            hasAddToCartLink: !!item.product.addToCartLink,
+            addToCartLink: item.product.addToCartLink,
+            quantity: item.quantity,
+          });
+        });
+
+        if (itemsWithLinks.length === 0) {
+          const firstItem = items[0];
+          if (firstItem?.product.url) {
+            const cartUrl = buildCartUrl(firstItem.product.url, supermarket);
+            if (cartUrl) {
+              try {
+                const supported = await Linking.canOpenURL(cartUrl);
+                if (supported) {
+                  await Linking.openURL(cartUrl);
+                  return;
+                }
+              } catch (error) {
+                console.error('Error opening cart URL:', error);
+              }
+            }
+          }
+
+          Alert.alert(
+            'Información',
+            `No hay enlace disponible para agregar productos al carrito de ${supermarket}.`
+          );
+          return;
+        }
+
+        if (itemsWithLinks.length > 1) {
+          const combinedLink = buildCombinedAddToCartLink(itemsWithLinks);
+          if (combinedLink) {
+            console.log('🛒 Opening combined cart URL:', combinedLink);
+            try {
+              const supported = await Linking.canOpenURL(combinedLink);
+              if (supported) {
+                await Linking.openURL(combinedLink);
+                Alert.alert(
+                  'Productos agregados',
+                  `Se abrió el carrito con ${itemsWithLinks.length} productos de ${supermarket}.`
+                );
+                return;
+              }
+            } catch (error) {
+              console.error('🛒 Error opening combined cart link:', error);
+            }
+          }
+        }
+
+        const failedItems: string[] = [];
+        const addedItems: string[] = [];
+
+        for (const item of itemsWithLinks) {
+          const cartUrl = updateCartLinkQuantity(item.product.addToCartLink!, item.quantity);
+          console.log('🛒 Opening cart URL:', cartUrl);
           try {
             const supported = await Linking.canOpenURL(cartUrl);
             if (supported) {
               await Linking.openURL(cartUrl);
-              return;
+              addedItems.push(item.product.canonname || item.product.canonid || 'Producto');
+              await new Promise(resolve => setTimeout(resolve, 400));
+            } else {
+              console.warn('🛒 URL not supported:', cartUrl);
+              failedItems.push(item.product.canonname || item.product.canonid || 'Producto');
             }
           } catch (error) {
-            console.error('Error opening cart URL:', error);
+            console.error('🛒 Error opening cart link:', error);
+            failedItems.push(item.product.canonname || item.product.canonid || 'Producto');
           }
         }
-      }
-      
-      Alert.alert(
-        'Información',
-        `No hay enlace disponible para agregar productos al carrito de ${supermarket}.`
-      );
-      return;
-    }
 
-    // Si hay un solo item, usar su link con la cantidad correcta
-    if (itemsWithLinks.length === 1) {
-      const item = itemsWithLinks[0];
-      const originalUrl = item.product.addToCartLink!;
-      const cartUrl = updateCartLinkQuantity(originalUrl, item.quantity);
-      
-      console.log('🛒 Single item - Original URL:', originalUrl);
-      console.log('🛒 Single item - Updated URL with quantity:', cartUrl);
-      console.log('🛒 Single item - Quantity:', item.quantity);
-      
-      try {
-        const supported = await Linking.canOpenURL(cartUrl);
-        if (supported) {
-          console.log('🛒 Opening URL:', cartUrl);
-          await Linking.openURL(cartUrl);
-          return;
-        } else {
-          console.error('🛒 URL not supported:', cartUrl);
-          Alert.alert('Error', 'No se puede abrir este enlace');
+        const ensureCartUrl = (link: string) => {
+          try {
+            const url = new URL(link);
+            return `${url.protocol}//${url.host}/checkout/#/cart`;
+          } catch {
+            return null;
+          }
+        };
+
+        const fallbackCartUrl =
+          itemsWithLinks[0].product.url
+            ? buildCartUrl(itemsWithLinks[0].product.url!, supermarket)
+            : null;
+        const finalCartUrl = ensureCartUrl(itemsWithLinks[0].product.addToCartLink!) || fallbackCartUrl;
+
+        if (finalCartUrl) {
+          try {
+            const supported = await Linking.canOpenURL(finalCartUrl);
+            if (supported) {
+              await Linking.openURL(finalCartUrl);
+            }
+          } catch (error) {
+            console.error('🛒 Error opening final cart URL:', error);
+          }
         }
-      } catch (error) {
-        console.error('🛒 Error opening cart link:', error);
-        Alert.alert('Error', 'No se pudo abrir el enlace del carrito');
-      }
-      return;
-    }
 
-    // Si hay múltiples items, abrir el primero con su cantidad
-    // Nota: La mayoría de supermercados no permiten agregar múltiples productos en una sola URL
-    // Por lo tanto, abrimos el primero y el usuario puede agregar los demás manualmente
-    const firstItem = itemsWithLinks[0];
-    const originalUrl = firstItem.product.addToCartLink!;
-    const cartUrl = updateCartLinkQuantity(originalUrl, firstItem.quantity);
-    
-    console.log('🛒 Multiple items - First item URL:', originalUrl);
-    console.log('🛒 Multiple items - Updated URL with quantity:', cartUrl);
-    console.log('🛒 Multiple items - Quantity:', firstItem.quantity);
-    
-    try {
-      const supported = await Linking.canOpenURL(cartUrl);
-      if (supported) {
-        console.log('🛒 Opening URL:', cartUrl);
-        await Linking.openURL(cartUrl);
-        // Opcional: mostrar mensaje informativo
-        if (itemsWithLinks.length > 1) {
+        if (addedItems.length > 0) {
           Alert.alert(
-            'Información',
-            `Se abrió el carrito con ${firstItem.quantity} unidad${firstItem.quantity !== 1 ? 'es' : ''} del primer producto. Puedes agregar los demás productos desde el carrito del supermercado.`
+            'Productos agregados',
+            `Se intentó agregar ${addedItems.length} producto${addedItems.length !== 1 ? 's' : ''} de ${supermarket}.`
           );
         }
-      } else {
-        console.error('🛒 URL not supported:', cartUrl);
-        Alert.alert('Error', 'No se puede abrir este enlace');
+
+        if (failedItems.length > 0) {
+          Alert.alert(
+            'No se pudieron abrir algunos enlaces',
+            `Productos sin enlace válido: ${failedItems.join(', ')}`
+          );
+        }
+      } finally {
+        setProcessingSupermarket(null);
       }
-    } catch (error) {
-      console.error('🛒 Error opening cart link:', error);
-      Alert.alert('Error', 'No se pudo abrir el enlace del carrito');
-    }
-  }, []);
+    },
+    [buildCartUrl, processingSupermarket, updateCartLinkQuantity]
+  );
 
   const handleClearAll = useCallback(() => {
     if (cart.items.length === 0) {
@@ -280,8 +386,7 @@ export default function CartScreen({ navigation }: any) {
             <TouchableOpacity
               style={styles.quantityButton}
               onPress={() => handleUpdateQuantity(
-                item.product.canonid,
-                item.product.supermercado,
+                item,
                 item.quantity - 1
               )}
             >
@@ -291,8 +396,7 @@ export default function CartScreen({ navigation }: any) {
             <TouchableOpacity
               style={styles.quantityButton}
               onPress={() => handleUpdateQuantity(
-                item.product.canonid,
-                item.product.supermercado,
+                item,
                 item.quantity + 1
               )}
             >
@@ -304,7 +408,7 @@ export default function CartScreen({ navigation }: any) {
           </Text>
           <TouchableOpacity
             style={styles.removeButton}
-            onPress={() => handleRemoveItem(item.product.canonid, item.product.supermercado)}
+            onPress={() => handleRemoveItem(item)}
           >
             <Ionicons name="trash-outline" size={20} color="#ef4444" />
           </TouchableOpacity>
@@ -315,7 +419,9 @@ export default function CartScreen({ navigation }: any) {
   );
 
   const renderSupermarketGroup = useCallback(
-    ({ item: group }: { item: CartBySupermarket }) => (
+    ({ item: group }: { item: CartBySupermarket }) => {
+      const isProcessing = processingSupermarket === group.supermarket;
+      return (
       <View style={styles.supermarketGroup}>
         <View style={styles.supermarketHeader}>
           <View style={styles.supermarketHeaderInfo}>
@@ -326,11 +432,21 @@ export default function CartScreen({ navigation }: any) {
           </View>
           <View style={styles.supermarketActions}>
             <TouchableOpacity
-              style={styles.addToCartButton}
+              style={[
+                styles.addToCartButton,
+                isProcessing && styles.addToCartButtonDisabled,
+              ]}
               onPress={() => handleAddToSupermarketCart(group.supermarket, group.items)}
+              disabled={isProcessing}
             >
-              <Ionicons name="cart" size={18} color="#FFFFFF" />
-              <Text style={styles.addToCartButtonText}>Agregar al carrito</Text>
+              {isProcessing ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <>
+                  <Ionicons name="cart" size={18} color="#FFFFFF" />
+                  <Text style={styles.addToCartButtonText}>Agregar al carrito</Text>
+                </>
+              )}
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.clearButton}
@@ -343,12 +459,13 @@ export default function CartScreen({ navigation }: any) {
         <FlatList
           data={group.items}
           renderItem={renderCartItem}
-          keyExtractor={(item) => `${item.product.canonid}_${item.product.supermercado}`}
+          keyExtractor={(item) => item.productKey || `${item.product.canonid}_${item.product.supermercado}_${item.addedAt}`}
           scrollEnabled={false}
         />
       </View>
-    ),
-    [renderCartItem, handleAddToSupermarketCart, handleClearSupermarket]
+    );
+    },
+    [renderCartItem, handleAddToSupermarketCart, handleClearSupermarket, processingSupermarket]
   );
 
   if (cart.items.length === 0) {
@@ -657,6 +774,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     gap: 8,
   },
+  addToCartButtonDisabled: {
+    opacity: 0.6,
+  },
   addToCartButtonText: {
     color: '#FFFFFF',
     fontSize: 14,
@@ -839,4 +959,3 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
 });
-

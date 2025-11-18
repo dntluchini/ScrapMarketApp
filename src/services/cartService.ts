@@ -5,6 +5,7 @@ export interface CartItem {
   product: Product;
   quantity: number;
   addedAt: string;
+  productKey?: string;
 }
 
 export interface CartBySupermarket {
@@ -64,15 +65,64 @@ class CartService {
     }
   }
 
+  private normalizeValue(value?: string | null): string | null {
+    if (value === undefined || value === null) {
+      return null;
+    }
+    const trimmed = String(value).trim();
+    if (!trimmed) {
+      return null;
+    }
+    return trimmed.toLowerCase();
+  }
+
+  private resolveProductIdentifier(product: Product): string {
+    const candidates = [
+      product.canonid,
+      product.ean,
+      product.addToCartLink,
+      product.sku,
+      product.skuRef,
+      product.url,
+      product.imageUrl,
+      `${product.canonname || 'producto'}-${product.exact_weight || ''}`,
+    ];
+
+    for (const candidate of candidates) {
+      const normalized = this.normalizeValue(candidate);
+      if (normalized) {
+        return normalized;
+      }
+    }
+
+    return (
+      this.normalizeValue(`${product.canonname || 'producto'}-${product.precio}`) ||
+      'producto-sin-identificador'
+    );
+  }
+
+  private getProductKey(product: Product): string {
+    const market = this.normalizeValue(product.supermercado) || 'supermercado';
+    const identifier = this.resolveProductIdentifier(product);
+    return `${market}::${identifier}`;
+  }
+
+  private ensureCartItemKey(cartItem: CartItem): string {
+    if (!cartItem.productKey) {
+      cartItem.productKey = this.getProductKey(cartItem.product);
+    }
+    return cartItem.productKey;
+  }
+
   // Agregar producto al carrito
   async addToCart(product: Product, quantity: number = 1): Promise<void> {
     console.log('🛒 addToCart called:', product.canonname, product.supermercado, 'quantity:', quantity);
     console.log('🛒 Product addToCartLink:', product.addToCartLink);
     console.log('🛒 Full product object:', JSON.stringify(product, null, 2));
-    
+
+    const productKey = this.getProductKey(product);
     const existingItemIndex = this.cart.findIndex(
-      item => item.product.canonid === product.canonid && 
-               item.product.supermercado === product.supermercado
+      item => this.ensureCartItemKey(item) === productKey
     );
 
     console.log('🛒 Existing item index:', existingItemIndex);
@@ -94,6 +144,7 @@ class CartService {
         },
         quantity,
         addedAt: new Date().toISOString(),
+        productKey,
       });
       console.log('🛒 Added new item to cart, total items:', this.cart.length);
       console.log('🛒 New item addToCartLink:', this.cart[this.cart.length - 1].product.addToCartLink);
@@ -105,23 +156,21 @@ class CartService {
   }
 
   // Remover producto del carrito
-  async removeFromCart(productId: string, supermarket: string): Promise<void> {
-    this.cart = this.cart.filter(
-      item => !(item.product.canonid === productId && item.product.supermercado === supermarket)
-    );
+  async removeFromCart(product: Product): Promise<void> {
+    const productKey = this.getProductKey(product);
+    this.cart = this.cart.filter(item => this.ensureCartItemKey(item) !== productKey);
     await this.saveCart();
     this.notifyListeners();
   }
 
   // Actualizar cantidad de un producto
-  async updateQuantity(productId: string, supermarket: string, quantity: number): Promise<void> {
-    const item = this.cart.find(
-      item => item.product.canonid === productId && item.product.supermercado === supermarket
-    );
+  async updateQuantity(product: Product, quantity: number): Promise<void> {
+    const productKey = this.getProductKey(product);
+    const item = this.cart.find(item => this.ensureCartItemKey(item) === productKey);
 
     if (item) {
       if (quantity <= 0) {
-        await this.removeFromCart(productId, supermarket);
+        await this.removeFromCart(product);
       } else {
         item.quantity = quantity;
         await this.saveCart();
@@ -194,17 +243,15 @@ class CartService {
   }
 
   // Verificar si un producto está en el carrito
-  isInCart(productId: string, supermarket: string): boolean {
-    return this.cart.some(
-      item => item.product.canonid === productId && item.product.supermercado === supermarket
-    );
+  isInCart(product: Product): boolean {
+    const productKey = this.getProductKey(product);
+    return this.cart.some(item => this.ensureCartItemKey(item) === productKey);
   }
 
   // Obtener cantidad de un producto específico en el carrito
-  getProductQuantity(productId: string, supermarket: string): number {
-    const item = this.cart.find(
-      item => item.product.canonid === productId && item.product.supermercado === supermarket
-    );
+  getProductQuantity(product: Product): number {
+    const productKey = this.getProductKey(product);
+    const item = this.cart.find(item => this.ensureCartItemKey(item) === productKey);
     return item ? item.quantity : 0;
   }
 }

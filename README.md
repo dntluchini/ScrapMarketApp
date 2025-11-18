@@ -13,7 +13,7 @@ ScrapMarket App es una aplicación móvil multiplataforma que compara precios en
 
 - ⚡ Búsqueda en tiempo real con fallback automático a scraping cuando la base de datos carece de datos frescos.
 - 🧠 Agrupación inteligente por `EAN / marca / peso` y comparación de precios por supermercado para cada producto.
-- 🛒 **Carrito de compras integrado** con redirección directa a sitios web de supermercados con cantidades correctas.
+- 🛒 **Carrito de compras integrado** con redirección directa a sitios web de supermercados con cantidades correctas (incluye envío múltiple por supermercado).
 - 🔄 Rotación semántica de productos populares más un caché predictivo programado manejado por n8n.
 - 📱 UX mobile-first: skeleton loading, pull-to-refresh, renderizado progresivo, modales personalizados.
 - 🎨 **Badge animado del carrito** con efecto bounce y actualizaciones en tiempo real vía patrón observer.

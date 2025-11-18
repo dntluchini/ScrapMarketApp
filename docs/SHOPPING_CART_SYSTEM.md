@@ -85,6 +85,7 @@ interface CartItem {
   supermarket: string;
   imageUrl?: string;
   addToCartLink?: string;
+  productKey?: string; // Identificador único por supermercado (canonid/ean + addToCartLink)
 }
 ```
 
@@ -97,7 +98,7 @@ interface CartItem {
 - ✅ Agrupación automática por supermercado
 - ✅ Controles de cantidad por producto
 - ✅ Cálculo de subtotales por supermercado
-- ✅ Botón "Agregar al carrito" que redirige a la web del supermercado
+- ✅ Botón "Agregar al carrito" que combina todos los productos compatibles en un solo `addToCartLink` y cae en secuencia si algún SKU no soporta batch
 - ✅ Modales de confirmación para acciones destructivas
 - ✅ Capitalización correcta de nombres de productos
 
@@ -211,13 +212,13 @@ Para incrementos/decrementos subsecuentes, los botones +/- llaman a `cartService
 ```
 1. Usuario presiona "Agregar al carrito" en CartScreen
    ↓
-2. Se obtiene addToCartLink del producto
+2. Se agrupan los productos del supermercado y se intenta generar un addToCartLink combinado
    ↓
-3. Se actualiza el parámetro qty con la cantidad seleccionada
+3. Si todos los productos comparten host/path VTEX, se arma un único enlace con múltiples `sku/qty/seller`
    ↓
-4. Se abre la URL con Linking.openURL()
+4. Si algún SKU no soporta batch, se abren secuencialmente sus enlaces individuales con delays controlados
    ↓
-5. Navegador/App del supermercado se abre con producto en carrito
+5. Siempre se abre una URL de carrito (/checkout/#/cart o /carrito) para que el usuario vea el resultado final
 ```
 
 ---
@@ -226,7 +227,10 @@ Para incrementos/decrementos subsecuentes, los botones +/- llaman a `cartService
 
 ### URLs de "Add to Cart"
 
-Cada producto tiene un campo `addToCartLink` que apunta a la API del supermercado:
+Cada producto tiene un campo `addToCartLink` que apunta a la API del supermercado. El sistema soporta dos modos:
+
+1. **Batch (nuevo):** si todos los productos del supermercado comparten origen y endpoint VTEX, se genera una URL combinada agregando múltiples `sku/qty/seller/sc/price/cv`.
+2. **Secuencial (fallback):** cuando algún producto no comparte host/path o carece de link, se abren los enlaces individuales con `Linking.openURL`, actualizando `qty` y añadiendo un pequeño delay para no saturar al navegador.
 
 **Formato VTEX (Vea, Jumbo, Disco):**
 ```
