@@ -47,12 +47,13 @@ Más detalles técnicos (servicios, agentes, workflows) están en [`context.json
 3. **Configuración de ambiente**
    ```bash
    cp env.example .env
-   # completar credenciales de Supabase y n8n
+   # rellena EXPO_PUBLIC_SUPABASE_URL / KEY / API_BASE_URL con tus valores
    ```
+   > Expo puede leer el archivo automáticamente con `npx expo start --env-file .env`
 4. **Ejecutar**
    ```bash
-   npm start            # Expo / Metro
-   docker compose up    # n8n (si no está corriendo)
+   npx expo start --env-file .env   # Expo / Metro con variables cargadas
+   docker compose up                # n8n (si no está corriendo)
    ```
    > Al testear en dispositivos usa la IP local: `http://192.168.1.99:5678`.
 
@@ -62,6 +63,22 @@ npm run test:connection   # Verificación de conectividad entre app, Supabase, n
 npm run test:search       # Validación de búsqueda end-to-end
 npx tsc --noEmit          # Verificación de TypeScript en modo estricto
 ```
+
+---
+
+## 🔐 Variables de Entorno
+
+| Variable | Descripción | Ejemplo |
+| --- | --- | --- |
+| `EXPO_PUBLIC_SUPABASE_URL` | URL de tu proyecto Supabase (sin `/rest/v1`) | `https://your-project.supabase.co` |
+| `EXPO_PUBLIC_SUPABASE_ANON_KEY` | Clave pública anon para llamadas desde el cliente | `eyJhbGciOiJI...` |
+| `EXPO_PUBLIC_API_BASE_URL` | Endpoint base de n8n (webhooks) | `http://192.168.1.99:5678` |
+| `EXPO_PUBLIC_REAL_TIME_SCRAPING` | Flag para habilitar scraping en vivo | `true` |
+| `EXPO_PUBLIC_OFFLINE_MODE` | Flag para mostrar datos mockeados | `false` |
+| `EXPO_PUBLIC_DEBUG_LOGGING` | Activa logs verbosos en la app | `true` |
+| `EXPO_PUBLIC_ENVIRONMENT` | Entorno actual (`development`, `staging`, `production`) | `development` |
+
+> Mantén tu `.env` fuera del control de versiones. El repositorio solo incluye `env.example` con placeholders.
 
 ---
 
