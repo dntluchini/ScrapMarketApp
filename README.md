@@ -118,41 +118,11 @@ Los exports JSON de cada workflow están en el repositorio (`/webhook_*.json`) y
 
 ---
 
-## 📊 Estadísticas del Proyecto
-
-- **Líneas de código**: ~6,500+
-- **Archivos TypeScript**: 25+
-- **Componentes React**: 15+
-- **Pantallas**: 5
-- **Servicios**: 5
-- **Hooks personalizados**: 2
-- **Cobertura funcional**: 95%
-
----
-
 ## 🤝 Contribuciones
 
 Actualmente este es un proyecto personal en desarrollo activo. Las contribuciones son bienvenidas una vez que se alcance la versión estable v1.5.0.
 
 Si encuentras un bug o tienes una sugerencia, por favor abre un issue en GitHub.
-
----
-
-## 📄 Licencia
-
-Este proyecto está bajo desarrollo. La licencia será definida en versiones futuras.
-
----
-
-## 🙏 Agradecimientos
-
-- **VTEX** por sus APIs públicas
-- **n8n** por la plataforma de automatización
-- **Supabase** por la infraestructura de base de datos
-- **Expo** por el framework de desarrollo móvil
-- **Comunidad de React Native** por el soporte continuo
-
----
 
 ## 🔄 Actualizaciones Recientes
 
